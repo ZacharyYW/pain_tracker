@@ -26,6 +26,16 @@ import com.example.pain_tracker.model.*
 import com.example.pain_tracker.viewmodel.DashboardViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 // ── colour palette ────────────────────────────────────────────────────────────
 private val BgDark      = Color(0xFF0D0D0F)
@@ -43,15 +53,62 @@ private fun scoreColor(s: Int)  = if (s >= 70) GreenAccent else if (s >= 45) Amb
 private fun zoneColor(l: ZoneLevel) = when(l) { ZoneLevel.SEVERE -> PinkAccent; ZoneLevel.MODERATE -> AmberAccent; ZoneLevel.MILD -> GreenAccent }
 
 // ── top-level screen ──────────────────────────────────────────────────────────
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
-    val monthScores   by vm.monthScores.collectAsState()
-    val weekScores    by vm.weekScores.collectAsState()
-    val todaySessions by vm.todaySessions.collectAsState()
-    val todayScore    by vm.todayScore.collectAsState()
-    val showAddSheet  by vm.showAddSheet.collectAsState()
-    val expandedId    by vm.expandedId.collectAsState()
+    val monthScores       by vm.monthScores.collectAsState()
+    val displayedSessions by vm.displayedSessions.collectAsState()
+    val displayedScore    by vm.displayedScore.collectAsState()
+    val showAddSheet      by vm.showAddSheet.collectAsState()
+    val expandedId        by vm.expandedId.collectAsState()
+    val selectedDay       by vm.selectedDay.collectAsState()
+    val weekOffset        by vm.weekOffset.collectAsState()
+
+    // NEW: Pager State for swipeable weeks (starts at 5000 to allow infinite swiping both ways)
+    val pagerState = rememberPagerState(initialPage = 5000, pageCount = { 10000 })
+    val coroutineScope = rememberCoroutineScope()
+
+    // Determine current month/year based on what week is currently being viewed
+    val currentCal = remember(weekOffset) {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.WEEK_OF_YEAR, weekOffset)
+        // Adjust to the Thursday of that week to determine the month that "owns" this week
+        cal.set(Calendar.DAY_OF_WEEK, Calendar.THURSDAY)
+        cal
+    }
+
+    val currentMonthYear = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(currentCal.time)
+
+    // Generate dropdown options (e.g., 12 months back, 12 months forward)
+    val monthOptions = remember {
+        val cal = Calendar.getInstance()
+        cal.add(Calendar.MONTH, -12)
+        (0..24).map {
+            val y = cal.get(Calendar.YEAR)
+            val m = cal.get(Calendar.MONTH)
+            val label = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
+            cal.add(Calendar.MONTH, 1)
+            label to Pair(y, m)
+        }
+    }
+
+    // Sync ViewModel -> Pager (When selecting month from dropdown)
+    LaunchedEffect(weekOffset) {
+        if (pagerState.currentPage - 5000 != weekOffset) {
+            pagerState.animateScrollToPage(5000 + weekOffset)
+        }
+    }
+
+    // Sync Pager -> ViewModel (When swiping left/right)
+    LaunchedEffect(pagerState.currentPage) {
+        val targetOffset = pagerState.currentPage - 5000
+        if (weekOffset != targetOffset) {
+            vm.setWeekOffset(targetOffset)
+        }
+    }
+
+    val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+    val dateLabel = if (selectedDay == today && weekOffset == 0) "today" else "${currentMonthYear.split(" ")[0].take(3)} $selectedDay"
 
     Scaffold(containerColor = BgDark,
         floatingActionButton = {
@@ -61,29 +118,54 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
             }
         }
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 96.dp)) {
-            item { MonthCalendarSection(monthScores) }
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 96.dp)) {
+
+            // Re-added the Month section that was missing in your last paste!
+            item {
+                MonthCalendarSection(
+                    monthScores = monthScores,
+                    selectedDay = selectedDay,
+                    currentMonthYear = currentMonthYear,
+                    currentCal = currentCal,
+                    monthOptions = monthOptions,
+                    onMonthSelect = { y, m -> vm.setMonth(y, m) },
+                    onDayClick = { day, score -> vm.selectDay(day, score) }
+                )
+            }
             item { HorizontalDivider(color = Border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
-            item { WeekStripSection(weekScores) }
+
+            item {
+                WeekStripSection(
+                    scoresMap = monthScores,
+                    selectedDay = selectedDay,
+                    weekOffset = weekOffset,
+                    pagerState = pagerState,
+                    coroutineScope = coroutineScope,
+                    onDayClick = { day, score -> vm.selectDay(day, score) },
+
+                    // THIS IS THE MISSING LINE THAT CAUSED THE ERROR:
+                    onTodayClick = { vm.resetToToday() }
+                )
+            }
             item { HorizontalDivider(color = Border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+
             item {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("pain sessions — today", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    Text("pain sessions — $dateLabel", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                     TextButton(onClick = { vm.openAddSheet() },
                         colors = ButtonDefaults.textButtonColors(contentColor = PinkAccent)) {
                         Text("+ add session", fontSize = 12.sp)
                     }
                 }
             }
-            items(todaySessions, key = { it.id }) { session ->
+            items(displayedSessions, key = { it.id }) { session ->
                 SessionCard(session = session, expanded = expandedId == session.id,
                     onToggle = { vm.toggleSession(session.id) },
                     onToggleSx = { sx -> vm.toggleSymptom(session.id, sx) },
                     onNotes = { notes -> vm.updateNotes(session.id, notes) })
             }
-            item { todayScore?.let { DayScoreSummary(it) } }
+            item { displayedScore?.let { DayScoreSummary(it) } }
         }
     }
 
@@ -105,32 +187,75 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
 
 // ── monthly calendar ──────────────────────────────────────────────────────────
 @Composable
-fun MonthCalendarSection(monthScores: Map<Int, DayScore>) {
+fun MonthCalendarSection(
+    monthScores: Map<Int, DayScore>,
+    selectedDay: Int,
+    currentMonthYear: String,
+    currentCal: Calendar,
+    monthOptions: List<Pair<String, Pair<Int, Int>>>,
+    onMonthSelect: (Int, Int) -> Unit,
+    onDayClick: (Int, DayScore?) -> Unit
+) {
     var expanded by remember { mutableStateOf(true) }
-    val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+    var expandedMonthMenu by remember { mutableStateOf(false) }
 
     Column {
-        Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp),
+        Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Text("January 2026", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            TextButton(onClick = { expanded = !expanded },
-                colors = ButtonDefaults.textButtonColors(contentColor = PinkAccent)) {
+
+            // Interactive Dropdown Menu Box
+            Box {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { expandedMonthMenu = true }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(currentMonthYear, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Select Month", tint = TextPrimary)
+                }
+
+                DropdownMenu(
+                    expanded = expandedMonthMenu,
+                    onDismissRequest = { expandedMonthMenu = false },
+                    modifier = Modifier.background(Surface1)
+                ) {
+                    monthOptions.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option.first, color = TextPrimary) },
+                            onClick = {
+                                onMonthSelect(option.second.first, option.second.second)
+                                expandedMonthMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            TextButton(onClick = { expanded = !expanded }, colors = ButtonDefaults.textButtonColors(contentColor = PinkAccent)) {
                 Text(if (expanded) "hide calendar" else "show calendar", fontSize = 12.sp)
-                Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    null, modifier = Modifier.size(16.dp))
+                Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, modifier = Modifier.size(16.dp))
             }
         }
+
         AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     listOf("S","M","T","W","T","F","S").forEach { d ->
-                        Text(d, color = TextHint, fontSize = 10.sp, textAlign = TextAlign.Center,
-                            modifier = Modifier.weight(1f).padding(vertical = 4.dp))
+                        Text(d, color = TextHint, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                     }
                 }
-                val offset = 4; val daysInMonth = 31
+
+                // Calculate exact calendar grid offsets for accurate days
+                val daysInMonth = currentCal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                val firstDayCal = currentCal.clone() as Calendar
+                firstDayCal.set(Calendar.DAY_OF_MONTH, 1)
+                val offset = firstDayCal.get(Calendar.DAY_OF_WEEK) - 1 // 0 for Sunday
                 val rows = (offset + daysInMonth + 6) / 7
                 var dayCounter = 1
+
                 repeat(rows) { row ->
                     Row(modifier = Modifier.fillMaxWidth()) {
                         repeat(7) { col ->
@@ -140,15 +265,16 @@ fun MonthCalendarSection(monthScores: Map<Int, DayScore>) {
                             } else {
                                 val day = dayCounter++
                                 val ds = monthScores[day]
-                                val isToday = day == today
+                                val isSelected = day == selectedDay
+
                                 Box(contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .weight(1f).aspectRatio(1f).padding(1.dp)
-                                        .then(if (isToday) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                                        .clip(CircleShape).background(Color.White.copy(alpha = 0.04f))) {
+                                    modifier = Modifier.weight(1f).aspectRatio(1f).padding(1.dp)
+                                        .clip(CircleShape).clickable { onDayClick(day, ds) }
+                                        .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
+                                        .background(Color.White.copy(alpha = 0.04f))) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(scoreEmoji(ds?.score ?: 75), fontSize = 14.sp)
-                                        Text("$day", color = if (isToday) PinkAccent else TextHint, fontSize = 8.sp)
+                                        Text("$day", color = if (isSelected) PinkAccent else TextHint, fontSize = 8.sp)
                                     }
                                 }
                             }
@@ -161,30 +287,91 @@ fun MonthCalendarSection(monthScores: Map<Int, DayScore>) {
 }
 
 // ── week strip ────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun WeekStripSection(weekScores: List<DayScore>) {
+fun WeekStripSection(
+    scoresMap: Map<Int, DayScore>,
+    selectedDay: Int,
+    weekOffset: Int,
+    pagerState: PagerState,
+    coroutineScope: CoroutineScope,
+    onDayClick: (Int, DayScore?) -> Unit,
+    onTodayClick: () -> Unit // NEW Parameter
+) {
     val labels = listOf("Mon","Tue","Wed","Thu","Fri","Sat","Sun")
+
+    val weekLabel = when (weekOffset) {
+        0 -> "this week"
+        -1 -> "last week"
+        1 -> "next week"
+        else -> if (weekOffset < 0) "${-weekOffset} weeks ago" else "in $weekOffset weeks" // Fixed wording logic
+    }
+
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
-        Text("this week", color = TextHint, fontSize = 11.sp,
-            modifier = Modifier.padding(start = 20.dp, bottom = 8.dp))
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly) {
-            weekScores.forEachIndexed { i, ds ->
-                val isToday = i == 4
-                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                    Text(labels.getOrElse(i) { "" }, color = if (isToday) PinkAccent else TextHint, fontSize = 10.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Box(contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(38.dp)
-                            .then(if (isToday) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                            .clip(CircleShape).background(Color.White.copy(alpha = 0.04f))) {
-                        Text(scoreEmoji(ds.score), fontSize = 18.sp)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 12.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(weekLabel, color = TextHint, fontSize = 11.sp)
+
+            // NEW: Added the 'today' button alongside the arrows
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+
+                // Only show "today" button if we are NOT on the current week
+                AnimatedVisibility(visible = weekOffset != 0) {
+                    Text(
+                        text = "today",
+                        color = PinkAccent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onTodayClick() }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Prev", tint = TextPrimary,
+                        modifier = Modifier.clip(CircleShape).clickable { coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage - 1) } }.padding(4.dp).size(20.dp))
+                    Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Next", tint = TextPrimary,
+                        modifier = Modifier.clip(CircleShape).clickable { coroutineScope.launch { pagerState.animateScrollToPage(pagerState.currentPage + 1) } }.padding(4.dp).size(20.dp))
+                }
+            }
+        }
+
+        // NEW: Swappable Horizontal Pager
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
+
+            val pageWeekOffset = page - 5000
+            val loopCal = Calendar.getInstance()
+            loopCal.add(Calendar.WEEK_OF_YEAR, pageWeekOffset)
+            while (loopCal.get(Calendar.DAY_OF_WEEK) != Calendar.MONDAY) {
+                loopCal.add(Calendar.DAY_OF_MONTH, -1)
+            }
+
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+                for (i in 0 until 7) {
+                    val itemDay = loopCal.get(Calendar.DAY_OF_MONTH)
+                    val isSelected = itemDay == selectedDay
+                    val ds = scoresMap[itemDay]
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { onDayClick(itemDay, ds) }.padding(vertical = 4.dp)) {
+
+                        Text(labels[i], color = if (isSelected) PinkAccent else TextHint, fontSize = 10.sp)
+                        Spacer(Modifier.height(4.dp))
+                        Box(contentAlignment = Alignment.Center,
+                            modifier = Modifier.size(38.dp)
+                                .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
+                                .clip(CircleShape).background(Color.White.copy(alpha = 0.04f))) {
+                            Text(scoreEmoji(ds?.score ?: 75), fontSize = 18.sp)
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text("$itemDay", color = if (isSelected) PinkAccent else TextHint, fontSize = 10.sp)
                     }
-                    Spacer(Modifier.height(4.dp))
-                    Text("${ds.score}", color = scoreColor(ds.score), fontSize = 9.sp)
-                    Spacer(Modifier.height(4.dp))
-                    Box(modifier = Modifier.width(4.dp).height((ds.score * 0.4f + 4f).dp)
-                        .clip(RoundedCornerShape(2.dp)).background(scoreColor(ds.score).copy(alpha = 0.5f)))
+                    loopCal.add(Calendar.DAY_OF_MONTH, 1)
                 }
             }
         }
