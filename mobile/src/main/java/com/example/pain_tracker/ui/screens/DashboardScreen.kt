@@ -1,147 +1,398 @@
 package com.example.pain_tracker.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.animation.*
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.pain_tracker.model.PainRecord
+import com.example.pain_tracker.model.*
 import com.example.pain_tracker.viewmodel.DashboardViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
+// ── colour palette ────────────────────────────────────────────────────────────
+private val BgDark      = Color(0xFF0D0D0F)
+private val Surface1    = Color(0xFF161618)
+private val Surface2    = Color(0xFF1E1E22)
+private val Border      = Color(0xFF2A2A2E)
+private val TextPrimary = Color(0xFFF0F0F0)
+private val TextMuted   = Color(0xFF888888)
+private val TextHint    = Color(0xFF555555)
+private val PinkAccent  = Color(0xFFE8648C)
+private val AmberAccent = Color(0xFFEF9F27)
+private val GreenAccent = Color(0xFF639922)
+
+private fun scoreColor(s: Int)  = if (s >= 70) GreenAccent else if (s >= 45) AmberAccent else PinkAccent
+private fun zoneColor(l: ZoneLevel) = when(l) { ZoneLevel.SEVERE -> PinkAccent; ZoneLevel.MODERATE -> AmberAccent; ZoneLevel.MILD -> GreenAccent }
+
+// ── top-level screen ──────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(viewModel: DashboardViewModel = viewModel()) {
-    val painHistory by viewModel.painHistory.collectAsState()
-    val latestEcw by viewModel.latestEcw.collectAsState()
+fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
+    val monthScores   by vm.monthScores.collectAsState()
+    val weekScores    by vm.weekScores.collectAsState()
+    val todaySessions by vm.todaySessions.collectAsState()
+    val todayScore    by vm.todayScore.collectAsState()
+    val showAddSheet  by vm.showAddSheet.collectAsState()
+    val expandedId    by vm.expandedId.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Pain Tracker Dashboard") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            )
+    Scaffold(containerColor = BgDark,
+        floatingActionButton = {
+            FloatingActionButton(onClick = { vm.openAddSheet() },
+                containerColor = PinkAccent, contentColor = Color.White, shape = CircleShape) {
+                Icon(Icons.Default.Add, "Add session")
+            }
         }
-    ) { paddingValues ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp)
-        ) {
-            EcwCard(ecwValue = latestEcw)
+    ) { padding ->
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(bottom = 96.dp)) {
+            item { MonthCalendarSection(monthScores) }
+            item { HorizontalDivider(color = Border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+            item { WeekStripSection(weekScores) }
+            item { HorizontalDivider(color = Border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
+            item {
+                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("pain sessions — today", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    TextButton(onClick = { vm.openAddSheet() },
+                        colors = ButtonDefaults.textButtonColors(contentColor = PinkAccent)) {
+                        Text("+ add session", fontSize = 12.sp)
+                    }
+                }
+            }
+            items(todaySessions, key = { it.id }) { session ->
+                SessionCard(session = session, expanded = expandedId == session.id,
+                    onToggle = { vm.toggleSession(session.id) },
+                    onToggleSx = { sx -> vm.toggleSymptom(session.id, sx) },
+                    onNotes = { notes -> vm.updateNotes(session.id, notes) })
+            }
+            item { todayScore?.let { DayScoreSummary(it) } }
+        }
+    }
 
-            Spacer(modifier = Modifier.height(24.dp))
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    if (showAddSheet) {
+        ModalBottomSheet(onDismissRequest = { vm.closeAddSheet() }, sheetState = sheetState,
+            containerColor = Surface1,
+            dragHandle = {
+                Box(modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), contentAlignment = Alignment.Center) {
+                    Box(modifier = Modifier.width(36.dp).height(4.dp).background(Border, RoundedCornerShape(2.dp)))
+                }
+            }) {
+            AddSessionSheet(onSave = { sh, sm, eh, em, peak, sx, notes ->
+                vm.addManualSession(sh, sm, eh, em, peak, sx, notes)
+            }, onDismiss = { vm.closeAddSheet() })
+        }
+    }
+}
 
-            Text(
-                text = "Recent Pain Classifications",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
+// ── monthly calendar ──────────────────────────────────────────────────────────
+@Composable
+fun MonthCalendarSection(monthScores: Map<Int, DayScore>) {
+    var expanded by remember { mutableStateOf(true) }
+    val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(painHistory) { record ->
-                    PainRecordCard(record)
+    Column {
+        Row(modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text("January 2026", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+            TextButton(onClick = { expanded = !expanded },
+                colors = ButtonDefaults.textButtonColors(contentColor = PinkAccent)) {
+                Text(if (expanded) "hide calendar" else "show calendar", fontSize = 12.sp)
+                Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    null, modifier = Modifier.size(16.dp))
+            }
+        }
+        AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
+            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf("S","M","T","W","T","F","S").forEach { d ->
+                        Text(d, color = TextHint, fontSize = 10.sp, textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f).padding(vertical = 4.dp))
+                    }
+                }
+                val offset = 4; val daysInMonth = 31
+                val rows = (offset + daysInMonth + 6) / 7
+                var dayCounter = 1
+                repeat(rows) { row ->
+                    Row(modifier = Modifier.fillMaxWidth()) {
+                        repeat(7) { col ->
+                            val cellIndex = row * 7 + col
+                            if (cellIndex < offset || dayCounter > daysInMonth) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            } else {
+                                val day = dayCounter++
+                                val ds = monthScores[day]
+                                val isToday = day == today
+                                Box(contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .weight(1f).aspectRatio(1f).padding(1.dp)
+                                        .then(if (isToday) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
+                                        .clip(CircleShape).background(Color.White.copy(alpha = 0.04f))) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(scoreEmoji(ds?.score ?: 75), fontSize = 14.sp)
+                                        Text("$day", color = if (isToday) PinkAccent else TextHint, fontSize = 8.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+// ── week strip ────────────────────────────────────────────────────────────────
 @Composable
-fun EcwCard(ecwValue: Float?) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "BIA Sensor Data", style = MaterialTheme.typography.labelLarge)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Extracellular Water (ECW) Ratio",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            if (ecwValue != null) {
-                Text(
-                    text = "${(ecwValue * 100).toInt()}%",
-                    style = MaterialTheme.typography.displayMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
-                Text(text = "Indicator of fluid retention / inflammation.", style = MaterialTheme.typography.bodySmall)
-            } else {
-                Text(text = "No scan data available. Trigger scan from watch.")
+fun WeekStripSection(weekScores: List<DayScore>) {
+    val labels = listOf("Mon","Tue","Wed","Thu","Fri","Sat","Sun")
+    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+        Text("this week", color = TextHint, fontSize = 11.sp,
+            modifier = Modifier.padding(start = 20.dp, bottom = 8.dp))
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly) {
+            weekScores.forEachIndexed { i, ds ->
+                val isToday = i == 4
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
+                    Text(labels.getOrElse(i) { "" }, color = if (isToday) PinkAccent else TextHint, fontSize = 10.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Box(contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(38.dp)
+                            .then(if (isToday) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
+                            .clip(CircleShape).background(Color.White.copy(alpha = 0.04f))) {
+                        Text(scoreEmoji(ds.score), fontSize = 18.sp)
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text("${ds.score}", color = scoreColor(ds.score), fontSize = 9.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Box(modifier = Modifier.width(4.dp).height((ds.score * 0.4f + 4f).dp)
+                        .clip(RoundedCornerShape(2.dp)).background(scoreColor(ds.score).copy(alpha = 0.5f)))
+                }
             }
         }
     }
 }
 
+// ── session card ──────────────────────────────────────────────────────────────
 @Composable
-fun PainRecordCard(record: PainRecord) {
-    val sdf = remember { SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()) }
-    val timeString = sdf.format(Date(record.timestamp))
-
-    val (painText, painColor) = when (record.painLevel) {
-        0 -> "None" to Color(0xFF4CAF50)
-        1 -> "Mild" to Color(0xFFFFC107)
-        2 -> "Moderate" to Color(0xFFFF9800)
-        3 -> "Severe" to Color(0xFFF44336)
-        else -> "Unknown" to Color.Gray
+fun SessionCard(session: PainSession, expanded: Boolean, onToggle: () -> Unit,
+                onToggleSx: (Symptom) -> Unit, onNotes: (String) -> Unit) {
+    val sdf = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val timeStr = "${sdf.format(Date(session.startTime))} – ${sdf.format(Date(session.endTime))}"
+    val durStr  = "${session.durationMinutes}m · ${if (session.source == SessionSource.SMARTWATCH) "smartwatch" else "manual"}"
+    val (badgeText, badgeBg, badgeFg) = when {
+        session.peakLevel >= 7f -> Triple("severe",   PinkAccent.copy(0.15f),  PinkAccent)
+        session.peakLevel >= 4f -> Triple("moderate", AmberAccent.copy(0.15f), AmberAccent)
+        else                    -> Triple("mild",     GreenAccent.copy(0.15f), GreenAccent)
     }
+    val totalZ = session.zones.sumOf { it.durationMinutes }.toFloat().coerceAtLeast(1f)
+    var localNotes by remember(session.id) { mutableStateOf(session.notes) }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 5.dp)
+        .clip(RoundedCornerShape(14.dp)).background(Surface1)
+        .border(0.5.dp, if (expanded) PinkAccent.copy(0.4f) else Border, RoundedCornerShape(14.dp))
+        .clickable { onToggle() }.padding(14.dp)) {
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
             Column {
-                Text(text = timeString, style = MaterialTheme.typography.labelMedium)
-                Text(
-                    text = "Intensity: $painText",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Model Confidence: ${(record.confidence * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text(timeStr, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(durStr,  color = TextMuted,   fontSize = 11.sp)
             }
+            Box(modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(badgeBg).padding(horizontal = 10.dp, vertical = 3.dp)) {
+                Text(badgeText, color = badgeFg, fontSize = 11.sp)
+            }
+        }
 
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(painColor, shape = RoundedCornerShape(24.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                if (record.painLevel >= 2) {
-                    Icon(Icons.Default.Warning, contentDescription = "High Pain Alert", tint = Color.White)
+        Spacer(Modifier.height(10.dp))
+        Row(modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            session.zones.forEach { z ->
+                Box(modifier = Modifier.weight(z.durationMinutes / totalZ).fillMaxHeight()
+                    .clip(RoundedCornerShape(2.dp)).background(zoneColor(z.level)))
+            }
+        }
+
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            session.zones.forEach { z ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(zoneColor(z.level)))
+                    Text("${z.durationMinutes}m ${z.level.name.lowercase()}", color = TextMuted, fontSize = 10.sp)
                 }
             }
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column(modifier = Modifier.padding(top = 12.dp)) {
+                HorizontalDivider(color = Border, thickness = 0.5.dp)
+                Spacer(Modifier.height(12.dp))
+                Text("symptoms", color = TextHint, fontSize = 11.sp)
+                Spacer(Modifier.height(8.dp))
+                SymptomChips(
+                    symptoms = Symptom.entries.toList(),
+                    isActive = { it in session.symptoms },
+                    onToggle = { onToggleSx(it) }
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(value = localNotes, onValueChange = { localNotes = it; onNotes(it) },
+                    placeholder = { Text("add notes...", color = TextHint, fontSize = 12.sp) },
+                    modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PinkAccent.copy(0.4f), unfocusedBorderColor = Border,
+                        focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+                        cursorColor = PinkAccent,
+                        focusedContainerColor = BgDark, unfocusedContainerColor = BgDark),
+                    textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, color = TextPrimary))
+            }
+        }
+    }
+}
+
+// ── day score summary ─────────────────────────────────────────────────────────
+@Composable
+fun DayScoreSummary(ds: DayScore) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        ScoreCard("day score", "${ds.score}", ds.label, scoreColor(ds.score), Modifier.weight(1f))
+        ScoreCard("sessions", "${ds.sessions.size}", "${ds.totalMinutes}m total", TextPrimary, Modifier.weight(1f))
+        ScoreCard("peak pain", "%.1f".format(ds.peakSeverity), "/ 10",
+            if (ds.peakSeverity >= 7) PinkAccent else AmberAccent, Modifier.weight(1f))
+    }
+}
+
+@Composable
+fun ScoreCard(label: String, value: String, sub: String, valueColor: Color, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.clip(RoundedCornerShape(14.dp)).background(Surface1)
+        .border(0.5.dp, Border, RoundedCornerShape(14.dp)).padding(12.dp)) {
+        Text(label.uppercase(), color = TextHint, fontSize = 10.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(value, color = valueColor, fontSize = 26.sp, fontWeight = FontWeight.Medium, lineHeight = 26.sp)
+        Text(sub, color = TextMuted, fontSize = 11.sp)
+    }
+}
+
+// ── add session sheet ─────────────────────────────────────────────────────────
+@Composable
+fun AddSessionSheet(onSave: (Int,Int,Int,Int,Float,Set<Symptom>,String) -> Unit, onDismiss: () -> Unit) {
+    var startHour   by remember { mutableIntStateOf(14) }
+    var startMinute by remember { mutableIntStateOf(30) }
+    var endHour     by remember { mutableIntStateOf(15) }
+    var endMinute   by remember { mutableIntStateOf(15) }
+    var peakLevel   by remember { mutableFloatStateOf(5f) }
+    var symptoms    by remember { mutableStateOf(emptySet<Symptom>()) }
+    var notes       by remember { mutableStateOf("") }
+    val peakColor   = if (peakLevel >= 7f) PinkAccent else if (peakLevel >= 4f) AmberAccent else GreenAccent
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 32.dp)
+        .verticalScroll(rememberScrollState())) {
+        Text("log pain session", color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(bottom = 16.dp))
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("start time", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
+                SimpleTimePicker(startHour, startMinute, { startHour = it }, { startMinute = it })
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text("end time", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
+                SimpleTimePicker(endHour, endMinute, { endHour = it }, { endMinute = it })
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text("peak pain level", color = TextMuted, fontSize = 12.sp)
+        Text("%.0f".format(peakLevel), color = peakColor, fontSize = 28.sp, fontWeight = FontWeight.Medium,
+            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
+        Slider(value = peakLevel, onValueChange = { peakLevel = it }, valueRange = 1f..10f,
+            modifier = Modifier.fillMaxWidth(),
+            colors = SliderDefaults.colors(thumbColor = peakColor, activeTrackColor = peakColor, inactiveTrackColor = Border))
+
+        Spacer(Modifier.height(16.dp))
+        Text("symptoms", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+        SymptomChips(
+            symptoms = Symptom.entries.toList(),
+            isActive = { it in symptoms },
+            onToggle = { sx -> symptoms = if (sx in symptoms) symptoms - sx else symptoms + sx }
+        )
+
+        Spacer(Modifier.height(16.dp))
+        Text("notes", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
+        OutlinedTextField(value = notes, onValueChange = { notes = it },
+            placeholder = { Text("optional notes...", color = TextHint, fontSize = 12.sp) },
+            modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = PinkAccent.copy(0.4f), unfocusedBorderColor = Border,
+                focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+                cursorColor = PinkAccent,
+                focusedContainerColor = BgDark, unfocusedContainerColor = BgDark))
+
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = { onSave(startHour, startMinute, endHour, endMinute, peakLevel, symptoms, notes) },
+            modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = PinkAccent, contentColor = Color.White)) {
+            Text("save session", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+// ── symptom chips (wrapping rows, no FlowRow dependency) ─────────────────────
+@Composable
+fun SymptomChips(symptoms: List<Symptom>, isActive: (Symptom) -> Boolean, onToggle: (Symptom) -> Unit) {
+    val chunkSize = 3
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        symptoms.chunked(chunkSize).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { sx ->
+                    val active = isActive(sx)
+                    Box(modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (active) PinkAccent.copy(0.12f) else Surface2)
+                        .border(0.5.dp, if (active) PinkAccent.copy(0.3f) else Border, RoundedCornerShape(10.dp))
+                        .clickable { onToggle(sx) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(sx.label, color = if (active) PinkAccent else TextMuted, fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── hh:mm picker ──────────────────────────────────────────────────────────────
+@Composable
+fun SimpleTimePicker(hour: Int, minute: Int, onHour: (Int) -> Unit, onMinute: (Int) -> Unit) {
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(BgDark)
+        .border(0.5.dp, Border, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("▲", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onHour((hour+1)%24) })
+            Text("%02d".format(hour), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            Text("▼", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onHour((hour+23)%24) })
+        }
+        Text(":", color = TextMuted, fontSize = 20.sp, modifier = Modifier.padding(horizontal = 8.dp))
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("▲", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onMinute((minute+1)%60) })
+            Text("%02d".format(minute), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+            Text("▼", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onMinute((minute+59)%60) })
         }
     }
 }
