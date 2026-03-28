@@ -1,8 +1,12 @@
 package com.example.pain_tracker.ui.screens
 
+import android.R.attr.background
+import android.R.id.background
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +23,17 @@ import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 
+
+// ── colour palette ────────────────────────────────────────────────────────────
+private val BgColor      = Color(0xFFFCF4EC) //cream 0xFFFCF4EC
+private val Surface1    = Color(0xFF7A9B6A)
+private val Surface2    = Color(0xFF725241)
+private val Border      = Color(0xFF6B3820)
+private val TextPrimary = Color(0xFF6B3820)
+
+private val TextOnSurface = Color(0xFFFFFFFF)
+
+private val TextMuted   = Color(0xFF887D7D)
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
     val context = LocalContext.current
@@ -61,13 +76,13 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier.background(BgColor).fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Pain Tracker", style = MaterialTheme.typography.headlineLarge)
+        Text(text = "Pain Tracker", style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = "Patient Portal Login", style = MaterialTheme.typography.bodyLarge)
+        Text(text = "Patient Portal Login", style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -81,7 +96,13 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             onValueChange = { email = it },
             label = { Text("Email") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Border,
+                unfocusedBorderColor = Surface2, // Use Surface2 for the border
+                cursorColor = Border,
+                focusedLabelColor = Border
+            )
         )
         Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
@@ -90,7 +111,13 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Border,
+                unfocusedBorderColor = Surface2, // Use Surface2 for the border
+                cursorColor = Border,
+                focusedLabelColor = Border
+            )
         )
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -110,7 +137,11 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Surface1,
+                contentColor = TextOnSurface
+            )
         ) {
             Text("Sign in with Email")
         }
@@ -128,7 +159,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            border = BorderStroke(1.dp, Surface1), // Matches your Dashboard borders
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = Surface1)
         ) {
             Text("Sign in with Google")
         }
@@ -147,7 +180,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = !isLoading
+            enabled = !isLoading,
+            colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextMuted)
         ) {
             Text("Continue Anonymously")
         }

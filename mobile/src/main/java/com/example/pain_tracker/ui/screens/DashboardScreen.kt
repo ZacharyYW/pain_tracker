@@ -38,16 +38,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 // ── colour palette ────────────────────────────────────────────────────────────
-private val BgDark      = Color(0xFF0D0D0F)
-private val Surface1    = Color(0xFF161618)
-private val Surface2    = Color(0xFF1E1E22)
-private val Border      = Color(0xFF2A2A2E)
-private val TextPrimary = Color(0xFFF0F0F0)
-private val TextMuted   = Color(0xFF888888)
-private val TextHint    = Color(0xFF555555)
-private val PinkAccent  = Color(0xFFE8648C)
-private val AmberAccent = Color(0xFFEF9F27)
-private val GreenAccent = Color(0xFF639922)
+private val BgColor      = Color(0xFFFCF4EC) //cream 0xFFFCF4EC
+private val Surface1    = Color(0xFF7A9B6A)
+private val Surface2    = Color(0xFF725241)
+private val Border      = Color(0xFF6B3820)
+private val TextPrimary = Color(0xFF6B3820)
+
+private val TextOnSurface = Color(0xFFFFFFFF)
+
+private val TextMuted   = Color(0xFFD3D3D3)
+private val PinkAccent  = Color(0xFFFA84A8)
+private val AmberAccent = Color(0xFFFFB13D)
+private val GreenAccent = Color(0xFF96F32F)
 
 private fun scoreColor(s: Int)  = if (s >= 70) GreenAccent else if (s >= 45) AmberAccent else PinkAccent
 private fun zoneColor(l: ZoneLevel) = when(l) { ZoneLevel.SEVERE -> PinkAccent; ZoneLevel.MODERATE -> AmberAccent; ZoneLevel.MILD -> GreenAccent }
@@ -110,7 +112,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
     val dateLabel = if (selectedDay == today && weekOffset == 0) "today" else "${currentMonthYear.split(" ")[0].take(3)} $selectedDay"
 
-    Scaffold(containerColor = BgDark,
+    Scaffold(containerColor = BgColor,
         floatingActionButton = {
             FloatingActionButton(onClick = { vm.openAddSheet() },
                 containerColor = PinkAccent, contentColor = Color.White, shape = CircleShape) {
@@ -244,7 +246,7 @@ fun MonthCalendarSection(
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                 Row(modifier = Modifier.fillMaxWidth()) {
                     listOf("S","M","T","W","T","F","S").forEach { d ->
-                        Text(d, color = TextHint, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
+                        Text(d, color = TextPrimary, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                     }
                 }
 
@@ -271,10 +273,10 @@ fun MonthCalendarSection(
                                     modifier = Modifier.weight(1f).aspectRatio(1f).padding(1.dp)
                                         .clip(CircleShape).clickable { onDayClick(day, ds) }
                                         .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                                        .background(Color.White.copy(alpha = 0.04f))) {
+                                        .background(Surface2.copy(alpha = 0.04f))) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Text(scoreEmoji(ds?.score ?: 75), fontSize = 14.sp)
-                                        Text("$day", color = if (isSelected) PinkAccent else TextHint, fontSize = 8.sp)
+                                        Text("$day", color = if (isSelected) PinkAccent else TextPrimary, fontSize = 8.sp)
                                     }
                                 }
                             }
@@ -313,7 +315,7 @@ fun WeekStripSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(weekLabel, color = TextHint, fontSize = 11.sp)
+            Text(weekLabel, color = TextPrimary, fontSize = 11.sp)
 
             // NEW: Added the 'today' button alongside the arrows
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -360,16 +362,16 @@ fun WeekStripSection(
                     Column(horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { onDayClick(itemDay, ds) }.padding(vertical = 4.dp)) {
 
-                        Text(labels[i], color = if (isSelected) PinkAccent else TextHint, fontSize = 10.sp)
+                        Text(labels[i], color = if (isSelected) PinkAccent else TextPrimary, fontSize = 10.sp)
                         Spacer(Modifier.height(4.dp))
                         Box(contentAlignment = Alignment.Center,
                             modifier = Modifier.size(38.dp)
                                 .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                                .clip(CircleShape).background(Color.White.copy(alpha = 0.04f))) {
+                                .clip(CircleShape).background(Surface2.copy(alpha = 0.04f))) {
                             Text(scoreEmoji(ds?.score ?: 75), fontSize = 18.sp)
                         }
                         Spacer(Modifier.height(4.dp))
-                        Text("$itemDay", color = if (isSelected) PinkAccent else TextHint, fontSize = 10.sp)
+                        Text("$itemDay", color = if (isSelected) PinkAccent else TextPrimary, fontSize = 10.sp)
                     }
                     loopCal.add(Calendar.DAY_OF_MONTH, 1)
                 }
@@ -386,9 +388,9 @@ fun SessionCard(session: PainSession, expanded: Boolean, onToggle: () -> Unit,
     val timeStr = "${sdf.format(Date(session.startTime))} – ${sdf.format(Date(session.endTime))}"
     val durStr  = "${session.durationMinutes}m · ${if (session.source == SessionSource.SMARTWATCH) "smartwatch" else "manual"}"
     val (badgeText, badgeBg, badgeFg) = when {
-        session.peakLevel >= 7f -> Triple("severe",   PinkAccent.copy(0.15f),  PinkAccent)
-        session.peakLevel >= 4f -> Triple("moderate", AmberAccent.copy(0.15f), AmberAccent)
-        else                    -> Triple("mild",     GreenAccent.copy(0.15f), GreenAccent)
+        session.peakLevel >= 7f -> Triple("severe",   PinkAccent,  TextOnSurface)
+        session.peakLevel >= 4f -> Triple("moderate", AmberAccent, TextOnSurface)
+        else                    -> Triple("mild",     GreenAccent, TextOnSurface)
     }
     val totalZ = session.zones.sumOf { it.durationMinutes }.toFloat().coerceAtLeast(1f)
     var localNotes by remember(session.id) { mutableStateOf(session.notes) }
@@ -400,7 +402,7 @@ fun SessionCard(session: PainSession, expanded: Boolean, onToggle: () -> Unit,
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
             Column {
-                Text(timeStr, color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                Text(timeStr, color = TextOnSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                 Text(durStr,  color = TextMuted,   fontSize = 11.sp)
             }
             Box(modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(badgeBg).padding(horizontal = 10.dp, vertical = 3.dp)) {
@@ -431,7 +433,7 @@ fun SessionCard(session: PainSession, expanded: Boolean, onToggle: () -> Unit,
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 HorizontalDivider(color = Border, thickness = 0.5.dp)
                 Spacer(Modifier.height(12.dp))
-                Text("symptoms", color = TextHint, fontSize = 11.sp)
+                Text("symptoms", color = TextPrimary, fontSize = 11.sp)
                 Spacer(Modifier.height(8.dp))
                 SymptomChips(
                     symptoms = Symptom.entries.toList(),
@@ -440,13 +442,13 @@ fun SessionCard(session: PainSession, expanded: Boolean, onToggle: () -> Unit,
                 )
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(value = localNotes, onValueChange = { localNotes = it; onNotes(it) },
-                    placeholder = { Text("add notes...", color = TextHint, fontSize = 12.sp) },
+                    placeholder = { Text("add notes...", color = TextPrimary, fontSize = 12.sp) },
                     modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = PinkAccent.copy(0.4f), unfocusedBorderColor = Border,
                         focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
                         cursorColor = PinkAccent,
-                        focusedContainerColor = BgDark, unfocusedContainerColor = BgDark),
+                        focusedContainerColor = BgColor, unfocusedContainerColor = BgColor),
                     textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, color = TextPrimary))
             }
         }
@@ -469,7 +471,7 @@ fun DayScoreSummary(ds: DayScore) {
 fun ScoreCard(label: String, value: String, sub: String, valueColor: Color, modifier: Modifier = Modifier) {
     Column(modifier = modifier.clip(RoundedCornerShape(14.dp)).background(Surface1)
         .border(0.5.dp, Border, RoundedCornerShape(14.dp)).padding(12.dp)) {
-        Text(label.uppercase(), color = TextHint, fontSize = 10.sp)
+        Text(label.uppercase(), color = TextPrimary, fontSize = 10.sp)
         Spacer(Modifier.height(4.dp))
         Text(value, color = valueColor, fontSize = 26.sp, fontWeight = FontWeight.Medium, lineHeight = 26.sp)
         Text(sub, color = TextMuted, fontSize = 11.sp)
@@ -523,13 +525,13 @@ fun AddSessionSheet(onSave: (Int,Int,Int,Int,Float,Set<Symptom>,String) -> Unit,
         Spacer(Modifier.height(16.dp))
         Text("notes", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
         OutlinedTextField(value = notes, onValueChange = { notes = it },
-            placeholder = { Text("optional notes...", color = TextHint, fontSize = 12.sp) },
+            placeholder = { Text("optional notes...", color = TextPrimary, fontSize = 12.sp) },
             modifier = Modifier.fillMaxWidth(), minLines = 2, maxLines = 4,
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = PinkAccent.copy(0.4f), unfocusedBorderColor = Border,
                 focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
                 cursorColor = PinkAccent,
-                focusedContainerColor = BgDark, unfocusedContainerColor = BgDark))
+                focusedContainerColor = BgColor, unfocusedContainerColor = BgColor))
 
         Spacer(Modifier.height(20.dp))
         Button(onClick = { onSave(startHour, startMinute, endHour, endMinute, peakLevel, symptoms, notes) },
@@ -551,7 +553,7 @@ fun SymptomChips(symptoms: List<Symptom>, isActive: (Symptom) -> Boolean, onTogg
                     val active = isActive(sx)
                     Box(modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (active) PinkAccent.copy(0.12f) else Surface2)
+                        .background(if (active) PinkAccent.copy(0.15f) else Surface2.copy(alpha = 0.8f))
                         .border(0.5.dp, if (active) PinkAccent.copy(0.3f) else Border, RoundedCornerShape(10.dp))
                         .clickable { onToggle(sx) }
                         .padding(horizontal = 10.dp, vertical = 4.dp)
@@ -567,19 +569,19 @@ fun SymptomChips(symptoms: List<Symptom>, isActive: (Symptom) -> Boolean, onTogg
 // ── hh:mm picker ──────────────────────────────────────────────────────────────
 @Composable
 fun SimpleTimePicker(hour: Int, minute: Int, onHour: (Int) -> Unit, onMinute: (Int) -> Unit) {
-    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(BgDark)
+    Row(modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(BgColor)
         .border(0.5.dp, Border, RoundedCornerShape(8.dp)).padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("▲", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onHour((hour+1)%24) })
+            Text("▲", color = TextPrimary, fontSize = 10.sp, modifier = Modifier.clickable { onHour((hour+1)%24) })
             Text("%02d".format(hour), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-            Text("▼", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onHour((hour+23)%24) })
+            Text("▼", color = TextPrimary, fontSize = 10.sp, modifier = Modifier.clickable { onHour((hour+23)%24) })
         }
         Text(":", color = TextMuted, fontSize = 20.sp, modifier = Modifier.padding(horizontal = 8.dp))
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("▲", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onMinute((minute+1)%60) })
+            Text("▲", color = TextPrimary, fontSize = 10.sp, modifier = Modifier.clickable { onMinute((minute+1)%60) })
             Text("%02d".format(minute), color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium)
-            Text("▼", color = TextHint, fontSize = 10.sp, modifier = Modifier.clickable { onMinute((minute+59)%60) })
+            Text("▼", color = TextPrimary, fontSize = 10.sp, modifier = Modifier.clickable { onMinute((minute+59)%60) })
         }
     }
 }
