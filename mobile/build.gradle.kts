@@ -64,4 +64,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    implementation("com.kizitonwose.calendar:compose:2.5.0") //calendar
+    implementation("androidx.compose.material3:material3:1.2.0") //calendar dates
 }
