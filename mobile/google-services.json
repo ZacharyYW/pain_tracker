@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "625782320674",
+    "project_id": "paintracker-8e802",
+    "storage_bucket": "paintracker-8e802.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:625782320674:android:8a6680c64fad717d97247b",
+        "android_client_info": {
+          "package_name": "com.example.pain_tracker"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "625782320674-locfjf9gia89qsa2kacnruqsf5vilfss.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.pain_tracker",
+            "certificate_hash": "ddbe7eb36485220795de2f5b01b0d60863847a66"
+          }
+        },
+        {
+          "client_id": "625782320674-8g4gp2dctqd0ue5228ilnnjt0lgeafa2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4a-gU3UWCr_XRZ8EmY1Aurvr0rGQfW9Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "625782320674-8g4gp2dctqd0ue5228ilnnjt0lgeafa2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
