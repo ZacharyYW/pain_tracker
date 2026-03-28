@@ -17,13 +17,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MaterialTheme {
-                PeriodTrackerScreen()
-                /*Surface(
+               // PeriodTrackerScreen()
+                Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
                     PainTrackerApp()
-                }*/
+                }
             }
         }
     }
