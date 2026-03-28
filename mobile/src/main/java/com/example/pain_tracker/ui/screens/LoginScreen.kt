@@ -80,9 +80,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Pain Tracker", style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
+        Text(text = "perennial", style = MaterialTheme.typography.headlineLarge, color = TextPrimary)
         Spacer(modifier = Modifier.height(8.dp))
-        Text(text = "Patient Portal Login", style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
+        Text(text = "bloom through the seasons", style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -94,7 +94,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         OutlinedTextField(
             value = email,
             onValueChange = { email = it },
-            label = { Text("Email") },
+            label = { Text("email") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
             colors = OutlinedTextFieldDefaults.colors(
@@ -108,7 +108,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
         OutlinedTextField(
             value = password,
             onValueChange = { password = it },
-            label = { Text("Password") },
+            label = { Text("password") },
             visualTransformation = PasswordVisualTransformation(),
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
@@ -130,10 +130,10 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         .addOnCompleteListener { task ->
                             isLoading = false
                             if (task.isSuccessful) onLoginSuccess()
-                            else errorMessage = task.exception?.localizedMessage ?: "Login failed"
+                            else errorMessage = task.exception?.localizedMessage ?: "login failed"
                         }
                 } else {
-                    errorMessage = "Please enter email and password."
+                    errorMessage = "please enter email and password."
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -143,7 +143,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 contentColor = TextOnSurface
             )
         ) {
-            Text("Sign in with Email")
+            Text("sign in with email")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -163,7 +163,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             border = BorderStroke(1.dp, Surface1), // Matches your Dashboard borders
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Surface1)
         ) {
-            Text("Sign in with Google")
+            Text("sign in with Google")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -176,14 +176,14 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                     .addOnCompleteListener { task ->
                         isLoading = false
                         if (task.isSuccessful) onLoginSuccess()
-                        else errorMessage = task.exception?.localizedMessage ?: "Anonymous login failed"
+                        else errorMessage = task.exception?.localizedMessage ?: "anonymous login failed"
                     }
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
             colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextMuted)
         ) {
-            Text("Continue Anonymously")
+            Text("continue without logging in")
         }
 
         if (isLoading) {
