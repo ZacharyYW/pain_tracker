@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalLayoutApi::class)
-
 package com.example.pain_tracker.ui.screens
 
 import androidx.compose.animation.*
@@ -89,8 +87,8 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
         }
     }
 
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     if (showAddSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         ModalBottomSheet(onDismissRequest = { vm.closeAddSheet() }, sheetState = sheetState,
             containerColor = Surface1,
             dragHandle = {
@@ -248,20 +246,11 @@ fun SessionCard(session: PainSession, expanded: Boolean, onToggle: () -> Unit,
                 Spacer(Modifier.height(12.dp))
                 Text("symptoms", color = TextHint, fontSize = 11.sp)
                 Spacer(Modifier.height(8.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Symptom.entries.forEach { sx ->
-                        val active = sx in session.symptoms
-                        Box(modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (active) PinkAccent.copy(0.12f) else Surface2)
-                            .border(0.5.dp, if (active) PinkAccent.copy(0.3f) else Border, RoundedCornerShape(10.dp))
-                            .clickable { onToggleSx(sx) }
-                            .padding(horizontal = 10.dp, vertical = 4.dp)) {
-                            Text(sx.label, color = if (active) PinkAccent else TextMuted, fontSize = 11.sp)
-                        }
-                    }
-                }
+                SymptomChips(
+                    symptoms = Symptom.entries.toList(),
+                    isActive = { it in session.symptoms },
+                    onToggle = { onToggleSx(it) }
+                )
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(value = localNotes, onValueChange = { localNotes = it; onNotes(it) },
                     placeholder = { Text("add notes...", color = TextHint, fontSize = 12.sp) },
@@ -338,19 +327,11 @@ fun AddSessionSheet(onSave: (Int,Int,Int,Int,Float,Set<Symptom>,String) -> Unit,
 
         Spacer(Modifier.height(16.dp))
         Text("symptoms", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Symptom.entries.forEach { sx ->
-                val active = sx in symptoms
-                Box(modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(if (active) PinkAccent.copy(0.12f) else Surface2)
-                    .border(0.5.dp, if (active) PinkAccent.copy(0.3f) else Border, RoundedCornerShape(10.dp))
-                    .clickable { symptoms = if (active) symptoms - sx else symptoms + sx }
-                    .padding(horizontal = 10.dp, vertical = 4.dp)) {
-                    Text(sx.label, color = if (active) PinkAccent else TextMuted, fontSize = 11.sp)
-                }
-            }
-        }
+        SymptomChips(
+            symptoms = Symptom.entries.toList(),
+            isActive = { it in symptoms },
+            onToggle = { sx -> symptoms = if (sx in symptoms) symptoms - sx else symptoms + sx }
+        )
 
         Spacer(Modifier.height(16.dp))
         Text("notes", color = TextMuted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
@@ -368,6 +349,30 @@ fun AddSessionSheet(onSave: (Int,Int,Int,Int,Float,Set<Symptom>,String) -> Unit,
             modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = PinkAccent, contentColor = Color.White)) {
             Text("save session", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
+// ── symptom chips (wrapping rows, no FlowRow dependency) ─────────────────────
+@Composable
+fun SymptomChips(symptoms: List<Symptom>, isActive: (Symptom) -> Boolean, onToggle: (Symptom) -> Unit) {
+    val chunkSize = 3
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        symptoms.chunked(chunkSize).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { sx ->
+                    val active = isActive(sx)
+                    Box(modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (active) PinkAccent.copy(0.12f) else Surface2)
+                        .border(0.5.dp, if (active) PinkAccent.copy(0.3f) else Border, RoundedCornerShape(10.dp))
+                        .clickable { onToggle(sx) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Text(sx.label, color = if (active) PinkAccent else TextMuted, fontSize = 11.sp)
+                    }
+                }
+            }
         }
     }
 }
