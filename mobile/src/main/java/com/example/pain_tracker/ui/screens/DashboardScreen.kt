@@ -46,8 +46,8 @@ private val TextPrimary = Color(0xFF6B3820)
 
 private val TextOnSurface = Color(0xFFFFFFFF)
 
-private val TextMuted   = Color(0xFFD3D3D3)
-private val PinkAccent  = Color(0xFFFA84A8)
+private val TextMuted   = Color(0xFFDAD8D8)
+private val PinkAccent  = Color(0xFFCB5A6C)
 private val AmberAccent = Color(0xFFFFB13D)
 private val GreenAccent = Color(0xFF96F32F)
 
@@ -553,12 +553,12 @@ fun SymptomChips(symptoms: List<Symptom>, isActive: (Symptom) -> Boolean, onTogg
                     val active = isActive(sx)
                     Box(modifier = Modifier
                         .clip(RoundedCornerShape(10.dp))
-                        .background(if (active) PinkAccent.copy(0.15f) else Surface2.copy(alpha = 0.8f))
-                        .border(0.5.dp, if (active) PinkAccent.copy(0.3f) else Border, RoundedCornerShape(10.dp))
+                        .background(if (active) PinkAccent.copy( 0.8f) else Surface2.copy(alpha = 0.6f))
+                        .border(0.5.dp,  Border, RoundedCornerShape(10.dp))
                         .clickable { onToggle(sx) }
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Text(sx.label, color = if (active) PinkAccent else TextMuted, fontSize = 11.sp)
+                        Text(sx.label, color = if (active) TextOnSurface else TextMuted, fontSize = 11.sp)
                     }
                 }
             }
