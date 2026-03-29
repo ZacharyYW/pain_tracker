@@ -10,6 +10,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,6 +20,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -30,14 +32,12 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 
 // ── colour palette ────────────────────────────────────────────────────────────
-private val BgColor      = Color(0xFFFCF4EC) //cream 0xFFFCF4EC
+private val BgColor      = Color(0xFFFCF4EC)
 private val Surface1    = Color(0xFF7A9B6A)
 private val Surface2    = Color(0xFF725241)
 private val Border      = Color(0xFF6B3820)
 private val TextPrimary = Color(0xFF6B3820)
-
 private val TextOnSurface = Color(0xFFFFFFFF)
-
 private val TextMuted   = Color(0xFF887D7D)
 
 @Composable
@@ -58,9 +58,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var password by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-
-    // NEW: State to track if the user is logging in or registering
     var isRegistering by remember { mutableStateOf(false) }
+
 
     val auth = remember { FirebaseAuth.getInstance() }
 
@@ -157,6 +156,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 label = { Text("email") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                // FIX 1: Explicitly tell the OS this is an email field to prevent file path suggestions
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrect = false),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Border,
                     unfocusedBorderColor = Surface2,
@@ -172,6 +173,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                // Fix 2: Explicitly tell the OS this is a password field
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrect = false),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Border,
                     unfocusedBorderColor = Surface2,
@@ -187,7 +190,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                         isLoading = true
                         errorMessage = null
                         if (isRegistering) {
-                            // NEW: Handle Registration
                             auth.createUserWithEmailAndPassword(email.trim(), password)
                                 .addOnCompleteListener { task ->
                                     isLoading = false
@@ -195,7 +197,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                     else errorMessage = task.exception?.localizedMessage ?: "registration failed"
                                 }
                         } else {
-                            // EXISTING: Handle Login
                             auth.signInWithEmailAndPassword(email.trim(), password)
                                 .addOnCompleteListener { task ->
                                     isLoading = false
@@ -217,11 +218,10 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 Text(if (isRegistering) "register with email" else "sign in with email")
             }
 
-            // NEW: Toggle between Login and Register modes
             TextButton(
                 onClick = {
                     isRegistering = !isRegistering
-                    errorMessage = null // Clear errors when switching modes
+                    errorMessage = null
                 },
                 modifier = Modifier.padding(top = 4.dp)
             ) {
