@@ -30,6 +30,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
+import com.example.pain_tracker.repository.FirestoreRepository
 
 // ── colour palette ────────────────────────────────────────────────────────────
 private val BgColor      = Color(0xFFFCF4EC)
