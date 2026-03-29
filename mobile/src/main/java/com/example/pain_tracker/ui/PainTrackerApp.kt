@@ -6,7 +6,7 @@ import com.example.pain_tracker.ui.screens.DevicePairingScreen
 import com.example.pain_tracker.ui.screens.LoginScreen
 
 @Composable
-fun PainTrackerApp() { // Renamed from EndoInsightMobileApp
+fun PainTrackerApp() {
     var isLoggedIn by remember { mutableStateOf(false) }
     var isPaired by remember { mutableStateOf(false) }
 
