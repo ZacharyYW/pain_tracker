@@ -117,70 +117,75 @@ def load_and_clean_data():
     avg_rows = filtered_df['event_id'].value_counts().mean()
     print(f"Average rows per event: {avg_rows:.1f} (Target is ~30)")
     
-    # --- Step 6: Feature extraction per event ---
-    def extract_features(event_df):
-        # 1. HR Features
-        hr_mean = event_df['hr'].mean()
-        hr_std = event_df['hr'].std()
-        hr_min = event_df['hr'].min()
-        hr_max = event_df['hr'].max()
+    # --- Step 6: Sliding Window Feature Extraction ---
+    WINDOW_SIZE = 10      # rows per window
+    STEP_SIZE = 1         # how many rows to slide each time
+
+    def extract_features_from_window(window_df):
+        hr = window_df['hr'].values
+        all_ibis = [val for sublist in window_df['ibi'] for val in sublist]
+        
+        hr_mean = np.mean(hr)
+        hr_std = np.std(hr)
+        hr_min = np.min(hr)
+        hr_max = np.max(hr)
         hr_range = hr_max - hr_min
-        
-        # 2. IBI Features - Flatten all IBI lists in this window into one long list
-        all_ibis = [val for sublist in event_df['ibi'] for val in sublist]
-        
+
         if len(all_ibis) > 1:
-            ibi_mean = np.mean(all_ibis)
-            ibi_std = np.std(all_ibis)
-            ibi_min = np.min(all_ibis)
-            ibi_max = np.max(all_ibis)
-            ibi_range = ibi_max - ibi_min
-            
-            # First and second differences (Heart Rate Variability signals)
             ibis_array = np.array(all_ibis)
+            ibi_mean = np.mean(ibis_array)
+            ibi_std = np.std(ibis_array)
+            ibi_min = np.min(ibis_array)
+            ibi_max = np.max(ibis_array)
+            ibi_range = ibi_max - ibi_min
             first_diffs = np.abs(np.diff(ibis_array))
             ibi_first_diff_mean = np.mean(first_diffs)
+            ibi_second_diff_mean = np.mean(np.abs(np.diff(first_diffs))) if len(first_diffs) > 1 else 0.0
             
-            if len(first_diffs) > 1:
-                second_diffs = np.abs(np.diff(first_diffs))
-                ibi_second_diff_mean = np.mean(second_diffs)
-            else:
-                ibi_second_diff_mean = 0.0
+            # RMSSD - root mean square of successive differences, key HRV metric
+            rmssd = np.sqrt(np.mean(np.diff(ibis_array) ** 2))
+            
+            # pNN50 - proportion of successive IBI differences > 50ms
+            pnn50 = np.sum(np.abs(np.diff(ibis_array)) > 50) / len(ibis_array)
         else:
-            # Fallback if an event somehow has no valid IBI data
             ibi_mean = ibi_std = ibi_min = ibi_max = ibi_range = 0.0
-            ibi_first_diff_mean = ibi_second_diff_mean = 0.0
-            
-        # 3. ECG Feature - Mean of the 10 values (same across window, take first row)
-        first_ecg = event_df['ecg'].iloc[0]
-        ecg_mean = np.mean(first_ecg) if len(first_ecg) > 0 else 0.0
-        
-        # 4. Labels and Metadata
-        pain_level = event_df['pain_level'].iloc[0]
-        person_id = event_df['person_id'].iloc[0]
-        
-        # Return as a pandas Series to form our new DataFrame row
-        return pd.Series({
-            'hr_mean': hr_mean, 'hr_std': hr_std, 'hr_min': hr_min, 
+            ibi_first_diff_mean = ibi_second_diff_mean = rmssd = pnn50 = 0.0
+
+        # ECG variance instead of mean - captures waveform shape better
+        first_ecg = window_df['ecg'].iloc[0]
+        ecg_var = np.var(first_ecg) if len(first_ecg) > 0 else 0.0
+
+        return {
+            'hr_mean': hr_mean, 'hr_std': hr_std, 'hr_min': hr_min,
             'hr_max': hr_max, 'hr_range': hr_range,
-            'ibi_mean': ibi_mean, 'ibi_std': ibi_std, 'ibi_min': ibi_min, 
+            'ibi_mean': ibi_mean, 'ibi_std': ibi_std, 'ibi_min': ibi_min,
             'ibi_max': ibi_max, 'ibi_range': ibi_range,
             'ibi_first_diff_mean': ibi_first_diff_mean,
             'ibi_second_diff_mean': ibi_second_diff_mean,
-            'ecg_mean': ecg_mean,
-            'pain_level': pain_level,
-            'person_id': person_id
-        })
+            'rmssd': rmssd, 'pnn50': pnn50,
+            'ecg_var': ecg_var
+        }
 
-    print("\n--- Extracting Features (This might take a second)... ---")
-    # Apply the feature extraction to each grouped event
-    features_df = filtered_df.groupby('event_id').apply(extract_features).reset_index(drop=True)
-    
-    # Fill any potential NaNs (like if an event was too short to calculate standard deviation)
-    features_df = features_df.fillna(0)
+    print("\n--- Step 6: Sliding Window Feature Extraction ---")
+    all_windows = []
+
+    for event_id, event_df in filtered_df.groupby('event_id'):
+        event_df = event_df.reset_index(drop=True)
+        pain_level = event_df['pain_level'].iloc[0]
+        person_id = event_df['person_id'].iloc[0]
+        
+        # slide window across the event
+        for start in range(0, len(event_df) - WINDOW_SIZE + 1, STEP_SIZE):
+            window = event_df.iloc[start:start + WINDOW_SIZE]
+            features = extract_features_from_window(window)
+            features['pain_level'] = pain_level
+            features['person_id'] = person_id
+            all_windows.append(features)
+
+    features_df = pd.DataFrame(all_windows).fillna(0)
+    print(f"Events: {filtered_df['event_id'].nunique()} → Windows: {len(features_df)}")
     
     print("\n--- Step 6 Complete ---")
-    print(f"Distilled down to {len(features_df)} final feature rows.")
     
     # Change the return statement to output our new feature matrix!
     return features_df
@@ -189,8 +194,6 @@ if __name__ == "__main__":
     df = load_and_clean_data()
     
     if df is not None:
-        
-
         # --- Step 8: Save cleaned dataset ---
         output_path = os.path.join(BASE_DIR, 'processed_data.csv')
         df.to_csv(output_path, index=False)
