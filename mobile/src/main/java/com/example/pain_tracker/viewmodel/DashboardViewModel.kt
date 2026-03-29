@@ -1,22 +1,18 @@
 package com.example.pain_tracker.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.example.pain_tracker.model.*
+import com.example.pain_tracker.repository.FirestoreRepository
+import com.example.pain_tracker.repository.WatchSessionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import java.util.Calendar
-import androidx.lifecycle.viewModelScope
-import com.example.pain_tracker.model.PredictionPipeline
-import com.example.pain_tracker.repository.WatchSessionRepository
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import android.util.Log
-import com.example.pain_tracker.repository.FirestoreRepository
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import com.example.pain_tracker.model.CorrectionRecord
-import com.example.pain_tracker.model.peakLevelToClass
+import java.util.Calendar
 
 class DashboardViewModel : ViewModel() {
 
@@ -25,17 +21,11 @@ class DashboardViewModel : ViewModel() {
     private val _editingSession = MutableStateFlow<PainSession?>(null)
     val editingSession: StateFlow<PainSession?> = _editingSession.asStateFlow()
 
-    private val _painHistory = MutableStateFlow<List<PainRecord>>(emptyList())
-    val painHistory: StateFlow<List<PainRecord>> = _painHistory.asStateFlow()
+    private var allCachedSessions: List<PainSession> = emptyList()
 
-    private val _latestEcw = MutableStateFlow<Float?>(null)
-    val latestEcw: StateFlow<Float?> = _latestEcw.asStateFlow()
-
-    private val _monthScores = MutableStateFlow<Map<Int, DayScore>>(emptyMap())
-    val monthScores: StateFlow<Map<Int, DayScore>> = _monthScores.asStateFlow()
-
-    private val _weekScores = MutableStateFlow<List<DayScore>>(emptyList())
-    val weekScores: StateFlow<List<DayScore>> = _weekScores.asStateFlow()
+    // NEW: Keyed by "YYYY-MM-DD" so months never overlap in the week view
+    private val _scoresMap = MutableStateFlow<Map<String, DayScore>>(emptyMap())
+    val scoresMap: StateFlow<Map<String, DayScore>> = _scoresMap.asStateFlow()
 
     private val _selectedYear = MutableStateFlow(Calendar.getInstance().get(Calendar.YEAR))
     val selectedYear: StateFlow<Int> = _selectedYear.asStateFlow()
@@ -61,7 +51,6 @@ class DashboardViewModel : ViewModel() {
     private val _showPeriodSheet = MutableStateFlow(false)
     val showPeriodSheet: StateFlow<Boolean> = _showPeriodSheet.asStateFlow()
 
-    // set of "yyyy-MM-dd" strings marking period days
     private val _periodDays = MutableStateFlow<Set<String>>(emptySet())
     val periodDays: StateFlow<Set<String>> = _periodDays.asStateFlow()
 
@@ -80,14 +69,53 @@ class DashboardViewModel : ViewModel() {
     init {
         viewModelScope.launch {
             FirestoreRepository.signInAnonymously()
+            observeRealData()
         }
-        loadMockData()
         observeWatchSessions()
     }
 
+    // ─── real-time data ingestion ─────────────────────────────────────────────
 
+    private fun observeRealData() {
+        viewModelScope.launch {
+            FirestoreRepository.sessionStream().collect { sessions ->
+                allCachedSessions = sessions
+                rebuildCalendarData()
+            }
+        }
+    }
+
+    private fun rebuildCalendarData() {
+        val cal = Calendar.getInstance()
+
+        // Group all sessions globally by exact date
+        val sessionsByDate = allCachedSessions.groupBy {
+            cal.timeInMillis = it.startTime
+            "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH)}-${cal.get(Calendar.DAY_OF_MONTH)}"
+        }
+
+        // Create DayScores only for days that have data
+        val newScores = sessionsByDate.mapValues { (_, daySessions) ->
+            val score = refreshScore(daySessions)
+            DayScore(
+                date = 0L,
+                score = score,
+                label = scoreLabel(score),
+                sessions = daySessions
+            )
+        }
+
+        _scoresMap.value = newScores
+
+        // Update the bottom list of sessions for the exact selected day
+        val selectedKey = "${_selectedYear.value}-${_selectedMonth.value}-${_selectedDay.value}"
+        val todayScore = newScores[selectedKey]
+        _displayedScore.value = todayScore
+        _displayedSessions.value = todayScore?.sessions ?: emptyList()
+    }
 
     // ─── session actions ──────────────────────────────────────────────────────
+
     fun openAddSheet(session: PainSession? = null) {
         _editingSession.value = session
         _showAddSheet.value = true
@@ -106,114 +134,73 @@ class DashboardViewModel : ViewModel() {
         val totalMins = ((end - start) / 60_000).toInt().coerceAtLeast(1)
 
         val newSession = PainSession(
+            id = System.currentTimeMillis(),
             startTime = start, endTime = end, source = SessionSource.MANUAL,
             peakLevel = peak, zones = buildZones(peak, totalMins), symptoms = sx, notes = notes
         )
-        _displayedSessions.update { it + newSession }
-        refreshDisplayedScore()
+
         viewModelScope.launch {
-            runCatching {
-                FirestoreRepository.saveManualSession(newSession)
-            }.onFailure { e ->
-                Log.e("DashboardViewModel", "Failed to save manual session: ${e.message}")
-            }
+            FirestoreRepository.saveManualSession(newSession)
         }
         closeAddSheet()
     }
 
     fun updateSession(id: Long, sh: Int, sm: Int, eh: Int, em: Int, peak: Float, sx: Set<Symptom>, notes: String) {
-        // Find the session before updating so we can detect pain level changes on watch sessions
-        val original = _displayedSessions.value.find { it.id == id }
+        val original = allCachedSessions.find { it.id == id } ?: return
 
-        _displayedSessions.update { list ->
-            list.map { s ->
-                if (s.id == id) {
-                    val cal = Calendar.getInstance().apply { timeInMillis = s.startTime }
-                    cal.set(Calendar.HOUR_OF_DAY, sh); cal.set(Calendar.MINUTE, sm)
-                    val start = cal.timeInMillis
-                    cal.set(Calendar.HOUR_OF_DAY, eh); cal.set(Calendar.MINUTE, em)
-                    val end = cal.timeInMillis
-                    val totalMins = ((end - start) / 60_000).toInt().coerceAtLeast(1)
+        val cal = Calendar.getInstance().apply { timeInMillis = original.startTime }
+        cal.set(Calendar.HOUR_OF_DAY, sh); cal.set(Calendar.MINUTE, sm)
+        val start = cal.timeInMillis
+        cal.set(Calendar.HOUR_OF_DAY, eh); cal.set(Calendar.MINUTE, em)
+        val end = cal.timeInMillis
+        val totalMins = ((end - start) / 60_000).toInt().coerceAtLeast(1)
 
-                    // For watch sessions: only rebuild zones if the peak level actually changed.
-                    // If peak is unchanged, keep the ML-derived zones so the zone bar stays accurate.
-                    val updatedZones = if (s.source == SessionSource.SMARTWATCH && s.peakLevel == peak) {
-                        s.zones
-                    } else {
-                        buildZones(peak, totalMins)
-                    }
-
-                    s.copy(
-                        startTime = start, endTime = end, peakLevel = peak,
-                        zones = updatedZones, symptoms = sx, notes = notes
-                    )
-                } else s
-            }
+        val updatedZones = if (original.source == SessionSource.SMARTWATCH && original.peakLevel == peak) {
+            original.zones
+        } else {
+            buildZones(peak, totalMins)
         }
-        refreshDisplayedScore()
-        closeAddSheet()
 
-        val updated = _displayedSessions.value.find { it.id == id } ?: return
+        val updated = original.copy(
+            startTime = start, endTime = end, peakLevel = peak,
+            zones = updatedZones, symptoms = sx, notes = notes
+        )
 
         viewModelScope.launch {
-            // 1. Sync edit to Firestore
-            runCatching {
-                FirestoreRepository.updateSessionFields(updated)
-            }.onFailure { e ->
-                Log.e("DashboardViewModel", "Failed to update session: ${e.message}")
-            }
+            FirestoreRepository.updateSessionFields(updated)
 
-            // 2. If this was a watch session and the pain level changed, store a correction
-            //    for model retraining
-            if (original != null &&
-                original.source == SessionSource.SMARTWATCH &&
-                original.peakLevel != peak
-            ) {
+            if (original.source == SessionSource.SMARTWATCH && original.peakLevel != peak) {
                 val dominantPredicted = peakLevelToClass(original.peakLevel)
-                val windowTimestamps  = original.zones.map { it.hashCode().toLong() } // placeholder if windows not stored locally
+                val windowTimestamps  = original.zones.map { it.hashCode().toLong() }
 
-                runCatching {
-                    FirestoreRepository.saveCorrection(
-                        CorrectionRecord(
-                            sessionId            = id,
-                            timestamp            = System.currentTimeMillis(),
-                            originalPredicted    = dominantPredicted,
-                            correctedPainLevel   = peak,
-                            correctedClass       = peakLevelToClass(peak),
-                            windowTimestamps     = windowTimestamps,
-                        )
+                FirestoreRepository.saveCorrection(
+                    CorrectionRecord(
+                        sessionId = id,
+                        timestamp = System.currentTimeMillis(),
+                        originalPredicted = dominantPredicted,
+                        correctedPainLevel = peak,
+                        correctedClass = peakLevelToClass(peak),
+                        windowTimestamps = windowTimestamps,
                     )
-                }.onFailure { e ->
-                    Log.e("DashboardViewModel", "Failed to save correction: ${e.message}")
-                }
+                )
             }
         }
+        closeAddSheet()
     }
 
     fun deleteSession(id: Long) {
-        _displayedSessions.update { list -> list.filterNot { it.id == id } }
-        refreshDisplayedScore()
         viewModelScope.launch {
-            runCatching {
-                FirestoreRepository.deleteSession(id)
-            }.onFailure { e ->
-                Log.e("DashboardViewModel", "Failed to delete session: ${e.message}")
-            }
+            FirestoreRepository.deleteSession(id)
         }
         closeAddSheet()
     }
 
     // ─── calendar logic ───────────────────────────────────────────────────────
 
-    fun selectDay(year: Int, month: Int, dayOfMonth: Int, dayScore: DayScore?) {
-        // FIXED: Save the full date
+    fun selectDay(year: Int, month: Int, dayOfMonth: Int, dayScore: DayScore? = null) {
         _selectedYear.value = year
         _selectedMonth.value = month
         _selectedDay.value = dayOfMonth
-
-        val scoreFromMap = _monthScores.value[dayOfMonth]
-        _displayedScore.value = scoreFromMap ?: dayScore
-        _displayedSessions.value = scoreFromMap?.sessions ?: dayScore?.sessions ?: emptyList()
 
         val today = Calendar.getInstance().apply {
             firstDayOfWeek = Calendar.SUNDAY
@@ -229,47 +216,44 @@ class DashboardViewModel : ViewModel() {
         }
 
         val diffMs = target.timeInMillis - today.timeInMillis
-        val diffWeeks = Math.round(diffMs / (1000.0 * 60 * 60 * 24 * 7)).toInt()
-        _weekOffset.value = diffWeeks
+        _weekOffset.value = Math.round(diffMs / (1000.0 * 60 * 60 * 24 * 7)).toInt()
+
+        rebuildCalendarData()
     }
 
     fun resetToToday() {
         val today = Calendar.getInstance()
-
-        // FIXED: Reset the full date
         _selectedYear.value = today.get(Calendar.YEAR)
         _selectedMonth.value = today.get(Calendar.MONTH)
         _selectedDay.value = today.get(Calendar.DAY_OF_MONTH)
-
         _weekOffset.value = 0
-        val todayScore = _monthScores.value[_selectedDay.value]
-        _displayedScore.value = todayScore
-        _displayedSessions.value = todayScore?.sessions ?: emptyList()
+
+        rebuildCalendarData()
     }
 
     fun setWeekOffset(offset: Int) { _weekOffset.value = offset }
 
-    fun setMonth(year: Int, month: Int) { /* Logic omitted for brevity, same as previous */ }
-
-    // ─── helpers ──────────────────────────────────────────────────────────────
+    fun setMonth(year: Int, month: Int) {
+        _selectedYear.value = year
+        _selectedMonth.value = month
+        rebuildCalendarData()
+    }
 
     fun toggleSession(id: Long) { _expandedId.update { if (it == id) null else id } }
 
     fun toggleSymptom(sessionId: Long, symptom: Symptom) {
-        _displayedSessions.update { list ->
-            list.map { if (it.id == sessionId) it.copy(symptoms = if (symptom in it.symptoms) it.symptoms - symptom else it.symptoms + symptom) else it }
+        val session = allCachedSessions.find { it.id == sessionId } ?: return
+        val newSymptoms = if (symptom in session.symptoms) session.symptoms - symptom else session.symptoms + symptom
+        viewModelScope.launch {
+            FirestoreRepository.updateSessionFields(session.copy(symptoms = newSymptoms))
         }
-        refreshDisplayedScore()
     }
 
     fun updateNotes(sessionId: Long, notes: String) {
-        _displayedSessions.update { list -> list.map { if (it.id == sessionId) it.copy(notes = notes) else it } }
-    }
-
-    private fun refreshDisplayedScore() {
-        val sessions = _displayedSessions.value
-        val raw = refreshScore(sessions)
-        _displayedScore.update { it?.copy(score = raw, label = scoreLabel(raw), sessions = sessions) }
+        val session = allCachedSessions.find { it.id == sessionId } ?: return
+        viewModelScope.launch {
+            FirestoreRepository.updateSessionFields(session.copy(notes = notes))
+        }
     }
 
     private fun buildZones(peak: Float, total: Int): List<PainZone> = when {
@@ -278,37 +262,18 @@ class DashboardViewModel : ViewModel() {
         else       -> listOf(PainZone(ZoneLevel.MILD, total))
     }
 
-    private fun loadMockData() {
-        val now = System.currentTimeMillis()
-        val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-
-        val s1 = PainSession(id=1L, startTime=now-4*3600000L, endTime=now-2*3600000L, source=SessionSource.SMARTWATCH, peakLevel=8.2f,
-            zones=listOf(PainZone(ZoneLevel.SEVERE,60), PainZone(ZoneLevel.MODERATE,60)), symptoms=setOf(Symptom.CRAMPING))
-
-        val initialSessions = listOf(s1)
-        _displayedSessions.value = initialSessions
-
-        val mockMonth = mutableMapOf<Int, DayScore>()
-
-        // Loop through 31 days to ensure a full month is covered
-        for (i in 0 until 31) {
-            val day = i + 1
-
-            // Generate a random score between 15 and 95 for each day
-            val randomScore = (15..95).random()
-
-            mockMonth[day] = DayScore(
-                date = 0L,
-                score = randomScore,
-                label = scoreLabel(randomScore), // Dynamically sets "good", "fair", "poor"
-                sessions = if (day == today) initialSessions else emptyList()
-            )
-        }
-
-        _monthScores.value = mockMonth
-        _displayedScore.value = mockMonth[today]
+    private fun refreshScore(sessions: List<PainSession>): Int {
+        if (sessions.isEmpty()) return 100
+        val totalPainMins = sessions.sumOf { it.durationMinutes }
+        val peak = sessions.maxOfOrNull { it.peakLevel } ?: 0f
+        return (100 - (totalPainMins * 1.2f + peak * 3f)).toInt().coerceIn(0, 100)
     }
-    // ─── watch session ingestion ──────────────────────────────────────────────
+
+    private fun scoreLabel(score: Int): String = when {
+        score >= 70 -> "good"
+        score >= 45 -> "fair"
+        else -> "rough"
+    }
 
     private fun observeWatchSessions() {
         WatchSessionRepository.results
@@ -322,7 +287,6 @@ class DashboardViewModel : ViewModel() {
         val startTime = result.windows.first().timestamp
         val endTime   = result.windows.last().timestamp
 
-        // Map model's 0–3 class onto the dashboard's 1–10 peak level scale
         val peakLevel = when (result.dominantPrediction) {
             0    -> 2f
             1    -> 4f
@@ -330,8 +294,6 @@ class DashboardViewModel : ViewModel() {
             3    -> 9f
             else -> 5f
         }
-
-        val totalMins = ((endTime - startTime) / 60_000).toInt().coerceAtLeast(1)
 
         val newSession = PainSession(
             id        = System.currentTimeMillis(),
@@ -344,33 +306,12 @@ class DashboardViewModel : ViewModel() {
             notes     = "",
         )
 
-        // Add to the displayed list (same day view the user is looking at)
-        _displayedSessions.update { it + newSession }
-        refreshDisplayedScore()
-
-        // Also stamp today's calendar cell so the icon updates
-        val todayDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-        _monthScores.update { current ->
-            val todayScore = current[todayDay]
-            if (todayScore != null) {
-                val updatedSessions = todayScore.sessions + newSession
-                val updatedScore = refreshScore(updatedSessions)
-                current + (todayDay to todayScore.copy(
-                    score    = updatedScore,
-                    label    = scoreLabel(updatedScore),
-                    sessions = updatedSessions,
-                ))
-            } else current
+        viewModelScope.launch {
+            FirestoreRepository.saveWatchSession(newSession, result)
         }
     }
 
-    /**
-     * Groups consecutive windows with the same predicted level into PainZones.
-     * Falls back to buildZones() when the window list has no useful structure.
-     */
-    private fun buildZonesFromWindows(
-        windows: List<PredictionPipeline.WindowResult>
-    ): List<PainZone> {
+    private fun buildZonesFromWindows(windows: List<PredictionPipeline.WindowResult>): List<PainZone> {
         if (windows.isEmpty()) return emptyList()
 
         val zones   = mutableListOf<PainZone>()
@@ -381,18 +322,12 @@ class DashboardViewModel : ViewModel() {
             if (w.predicted == current) {
                 count++
             } else {
-                zones += PainZone(
-                    level           = toZoneLevel(current),
-                    durationMinutes = (count / 60).coerceAtLeast(1),
-                )
+                zones += PainZone(level = toZoneLevel(current), durationMinutes = (count / 60).coerceAtLeast(1))
                 current = w.predicted
                 count   = 1
             }
         }
-        zones += PainZone(
-            level           = toZoneLevel(current),
-            durationMinutes = (count / 60).coerceAtLeast(1),
-        )
+        zones += PainZone(level = toZoneLevel(current), durationMinutes = (count / 60).coerceAtLeast(1))
 
         return zones
     }
@@ -401,12 +336,5 @@ class DashboardViewModel : ViewModel() {
         3    -> ZoneLevel.SEVERE
         2    -> ZoneLevel.MODERATE
         else -> ZoneLevel.MILD
-    }
-
-    // Extracted from refreshDisplayedScore so it can be called for calendar updates too
-    private fun refreshScore(sessions: List<PainSession>): Int {
-        val totalPainMins = sessions.sumOf { it.durationMinutes }
-        val peak = sessions.maxOfOrNull { it.peakLevel } ?: 0f
-        return (100 - (totalPainMins * 1.2f + peak * 3f)).toInt().coerceIn(0, 100)
     }
 }

@@ -20,7 +20,7 @@ enum class InsightsViewMode(val label: String, val days: Int) {
 
 data class ScorePoint(
     val dateLabel: String,
-    val score: Float,       // 0–100, or -1f if no data
+    val score: Float,
     val epochDay: Long
 )
 
@@ -32,19 +32,12 @@ data class InsightsSummary(
     val daysTracked: Int
 )
 
-/**
- * One bar in the hourly pain chart.
- * [hour] is 0–23. [avgPeakLevel] is the mean peakLevel across all sessions
- * that started in this hour within the selected window, or 0f if none.
- * [sessionCount] is how many sessions contributed.
- */
 data class HourlyPainBar(
-    val hour: Int,           // 0–23
-    val avgPeakLevel: Float, // 0–10
+    val hour: Int,
+    val avgPeakLevel: Float,
     val sessionCount: Int
 )
 
-// Cached raw values — reused when switching view modes
 private data class RawEntry(val startTime: Long, val endTime: Long, val peakLevel: Float) {
     val durationMinutes: Int get() = ((endTime - startTime) / 60_000L).toInt().coerceAtLeast(1)
     val startHour: Int get() = Calendar.getInstance().also { it.timeInMillis = startTime }.get(Calendar.HOUR_OF_DAY)
@@ -82,20 +75,18 @@ class InsightsViewModel : ViewModel() {
         buildHourlyBars(filtered)
     }
 
-    fun loadData() {
+    private fun loadData() {
         viewModelScope.launch {
             _isLoading.value = true
-            try {
-                val sessions = FirestoreRepository.fetchSessions()
+            FirestoreRepository.sessionStream().collect { sessions ->
                 cachedEntries = sessions.map { s ->
                     RawEntry(s.startTime, s.endTime, s.peakLevel)
                 }
+
                 val filtered = filterByMode(cachedEntries, _viewMode.value)
                 buildChartPoints(filtered, _viewMode.value)
                 buildHourlyBars(filtered)
-            } catch (e: Exception) {
-                // Leave charts empty on failure
-            } finally {
+
                 _isLoading.value = false
             }
         }
@@ -104,14 +95,20 @@ class InsightsViewModel : ViewModel() {
     // ── filtering ─────────────────────────────────────────────────────────────
 
     private fun filterByMode(entries: List<RawEntry>, mode: InsightsViewMode): List<RawEntry> {
-        val cutoff = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(mode.days - 1)) }
+        val cutoff = Calendar.getInstance().apply {
+            // FIX: Zero out time so microsecond differences don't break the filter
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.DAY_OF_YEAR, -(mode.days - 1))
+        }
         return entries.filter { it.startTime >= cutoff.timeInMillis }
     }
 
     // ── hourly heatmap ────────────────────────────────────────────────────────
 
     private fun buildHourlyBars(entries: List<RawEntry>) {
-        // For each of the 24 hours, collect all sessions whose startTime falls in that hour
         val byHour = Array(24) { mutableListOf<Float>() }
         for (e in entries) {
             byHour[e.startHour].add(e.peakLevel)
@@ -129,30 +126,40 @@ class InsightsViewModel : ViewModel() {
     // ── score trend aggregation ───────────────────────────────────────────────
 
     private fun buildChartPoints(entries: List<RawEntry>, mode: InsightsViewMode) {
-        val now    = Calendar.getInstance()
-        val cutoff = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -(mode.days - 1)) }
+        // FIX: Ensure 'now' is perfectly aligned to midnight
+        val now = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val cutoff = (now.clone() as Calendar).apply {
+            add(Calendar.DAY_OF_YEAR, -(mode.days - 1))
+        }
 
-        val byDay = mutableMapOf<Long, MutableList<RawEntry>>()
+        // FIX: Use YYYY-MM-DD keys instead of epoch math to avoid timezone shift bugs
+        val byDay = mutableMapOf<String, MutableList<RawEntry>>()
+        val cal = Calendar.getInstance()
         for (e in entries) {
-            val day = e.startTime / 86_400_000L
-            byDay.getOrPut(day) { mutableListOf() }.add(e)
+            cal.timeInMillis = e.startTime
+            val key = "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH)}-${cal.get(Calendar.DAY_OF_MONTH)}"
+            byDay.getOrPut(key) { mutableListOf() }.add(e)
         }
 
         val points = mutableListOf<ScorePoint>()
 
         when (mode) {
-
             InsightsViewMode.WEEK, InsightsViewMode.MONTH -> {
                 val cursor = cutoff.clone() as Calendar
-                while (!cursor.after(now)) {
-                    val epochDay   = cursor.timeInMillis / 86_400_000L
-                    val dayEntries = byDay[epochDay]
+                while (!cursor.after(now)) { // This now perfectly reaches 'today'
+                    val key = "${cursor.get(Calendar.YEAR)}-${cursor.get(Calendar.MONTH)}-${cursor.get(Calendar.DAY_OF_MONTH)}"
+                    val dayEntries = byDay[key]
                     val score      = if (dayEntries != null) computeScore(dayEntries) else -1f
                     val label      = when (mode) {
                         InsightsViewMode.WEEK -> dayOfWeekLabel(cursor)
                         else                 -> "${cursor.get(Calendar.DAY_OF_MONTH)}"
                     }
-                    points.add(ScorePoint(label, score, epochDay))
+                    points.add(ScorePoint(label, score, cursor.timeInMillis))
                     cursor.add(Calendar.DAY_OF_MONTH, 1)
                 }
             }
@@ -165,11 +172,11 @@ class InsightsViewModel : ViewModel() {
                 while (!cursor.after(now)) {
                     val weekEnd = cursor.clone() as Calendar
                     weekEnd.add(Calendar.DAY_OF_MONTH, 6)
-                    val weekEntries = byDay.entries
-                        .filter { it.key in (cursor.timeInMillis / 86_400_000L)..(weekEnd.timeInMillis / 86_400_000L) }
-                        .flatMap { it.value }
+                    val weekEndRef = weekEnd.timeInMillis + 86399999L // End of the day
+
+                    val weekEntries = entries.filter { it.startTime in cursor.timeInMillis..weekEndRef }
                     val score = if (weekEntries.isNotEmpty()) computeScore(weekEntries) else -1f
-                    points.add(ScorePoint("${monthAbbr(cursor)} ${cursor.get(Calendar.DAY_OF_MONTH)}", score, cursor.timeInMillis / 86_400_000L))
+                    points.add(ScorePoint("${monthAbbr(cursor)} ${cursor.get(Calendar.DAY_OF_MONTH)}", score, cursor.timeInMillis))
                     cursor.add(Calendar.WEEK_OF_YEAR, 1)
                 }
             }
@@ -178,13 +185,13 @@ class InsightsViewModel : ViewModel() {
                 val cursor = cutoff.clone() as Calendar
                 cursor.set(Calendar.DAY_OF_MONTH, 1)
                 while (!cursor.after(now)) {
-                    val monthEnd = cursor.clone() as Calendar
-                    monthEnd.set(Calendar.DAY_OF_MONTH, cursor.getActualMaximum(Calendar.DAY_OF_MONTH))
-                    val monthEntries = byDay.entries
-                        .filter { it.key in (cursor.timeInMillis / 86_400_000L)..(monthEnd.timeInMillis / 86_400_000L) }
-                        .flatMap { it.value }
+                    val monthYear = "${cursor.get(Calendar.YEAR)}-${cursor.get(Calendar.MONTH)}"
+                    val monthEntries = entries.filter {
+                        cal.timeInMillis = it.startTime
+                        "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH)}" == monthYear
+                    }
                     val score = if (monthEntries.isNotEmpty()) computeScore(monthEntries) else -1f
-                    points.add(ScorePoint(monthAbbr(cursor), score, cursor.timeInMillis / 86_400_000L))
+                    points.add(ScorePoint(monthAbbr(cursor), score, cursor.timeInMillis))
                     cursor.add(Calendar.MONTH, 1)
                 }
             }
@@ -197,12 +204,11 @@ class InsightsViewModel : ViewModel() {
             avgScore      = scored.map { it.score }.average().toFloat(),
             bestScore     = scored.maxOf { it.score },
             worstScore    = scored.minOf { it.score },
-            totalSessions = byDay.values.sumOf { it.size },
+            totalSessions = entries.size,
             daysTracked   = scored.size
         ) else null
     }
 
-    // Same formula as DashboardViewModel.refreshScore
     private fun computeScore(entries: List<RawEntry>): Float {
         val totalPainMins = entries.sumOf { it.durationMinutes }
         val peak          = entries.maxOfOrNull { it.peakLevel } ?: 0f
