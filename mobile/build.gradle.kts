@@ -64,4 +64,7 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    implementation("biz.k11i:xgboost-predictor:0.3.1")
+    implementation("com.google.code.gson:gson:2.10.1")
 }
