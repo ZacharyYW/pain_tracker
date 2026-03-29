@@ -45,9 +45,17 @@ class MainActivity : ComponentActivity() {
             permissions.forEach { (perm, granted) ->
                 Log.d("PainTracker", "permission: $perm = $granted")
             }
-            // connect regardless - BODY_SENSORS returns false on Android 16
-            // but the SDK works fine with health.READ_HEART_RATE
-            healthTrackingManager.connect()
+
+            val activityRecognition = permissions[Manifest.permission.ACTIVITY_RECOGNITION] == true
+            val heartRate = permissions["android.permission.health.READ_HEART_RATE"] == true
+            val additionalHealth = permissions["com.samsung.android.hardware.sensormanager.permission.READ_ADDITIONAL_HEALTH_DATA"] == true
+
+            if (activityRecognition && heartRate && additionalHealth) {
+                healthTrackingManager.connect()
+            } else {
+                statusMessage = "missing permissions, app cannot start"
+                Log.d("PainTracker", "missing critical permissions")
+            }
         }
 
         setContent {
@@ -64,7 +72,7 @@ class MainActivity : ComponentActivity() {
                     Text("Log Pain Level:")
                     Row(modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly) {
-                        (0..4).forEach { level ->
+                        (0..3).forEach { level ->
                             Button(onClick = {
                                 val now = System.currentTimeMillis()
                                 if (now - lastLogTime >= LOG_COOLDOWN_MS) {
@@ -85,7 +93,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-
+        // if using android 15 or earlier, use BODY_SENSORS instead
         val hrPermission = if (Build.VERSION.SDK_INT >= 36) {
             "android.permission.health.READ_HEART_RATE"
         } else {
@@ -94,7 +102,6 @@ class MainActivity : ComponentActivity() {
 
         permissionLauncher.launch(arrayOf(
             Manifest.permission.ACTIVITY_RECOGNITION,
-            Manifest.permission.BODY_SENSORS,
             hrPermission,
             "com.samsung.android.hardware.sensormanager.permission.READ_ADDITIONAL_HEALTH_DATA"
         ))
