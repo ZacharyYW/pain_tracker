@@ -35,15 +35,15 @@ fun DevicePairingScreen(onPaired: () -> Unit) {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(text = "Paired Devices", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
+        Text(text = "paired devices", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
         Spacer(modifier = Modifier.height(16.dp))
 
         if (isScanning) {
             CircularProgressIndicator()
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Scanning for Galaxy Watch...")
+            Text("scanning for Galaxy Watch...")
         } else if (connectedNodes.isEmpty()) {
-            Text("No Wear OS devices found.", color = MaterialTheme.colorScheme.error)
+            Text("no Wear OS devices found.", color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(16.dp))
         }
 
@@ -67,7 +67,7 @@ fun DevicePairingScreen(onPaired: () -> Unit) {
                 contentColor = TextOnSurface
             )
         ) {
-            Text("Scan & Connect to Watch")
+            Text("scan & connect to watch")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -77,7 +77,7 @@ fun DevicePairingScreen(onPaired: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextMuted)
         ) {
-            Text("Skip for now (View Dashboard)")
+            Text("skip for now")
         }
     }
 }
