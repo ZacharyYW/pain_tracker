@@ -304,6 +304,7 @@ fun MonthCalendarSection(
                                 val ds = monthScores[day]
                                 val isSelected = day == selectedDay
 
+
                                 // V1 LAYOUT (Images with text safely underneath) + V2 CLICK LOGIC
                                 Column(
                                     modifier = Modifier.weight(1f).padding(vertical = 4.dp),
@@ -317,7 +318,7 @@ fun MonthCalendarSection(
                                             .padding(1.dp)
                                             .clip(CircleShape)
                                             .background(Surface2.copy(alpha = 0.04f))
-                                            .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
+                                            .then(if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape) else Modifier)
                                             // V2 Click Logic:
                                             .clickable { onDayClick(currentYear, currentMonth, day, ds) }
                                     ) {
@@ -431,7 +432,7 @@ fun WeekStripSection(
                                 .padding(1.dp)
                                 .clip(CircleShape)
                                 .background(Surface2.copy(alpha = 0.04f))
-                                .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
+                                .then(if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape) else Modifier)
                                 // V2 Click Logic:
                                 .clickable { onDayClick(itemYear, itemMonth, itemDay, ds) }
                         ) {
