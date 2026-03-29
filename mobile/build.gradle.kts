@@ -57,6 +57,8 @@ dependencies {
     implementation(libs.firebase.storage)
     implementation(libs.play.services.auth)
 
+    implementation(libs.xgboost.predictor)
+    implementation(libs.gson)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -64,7 +66,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    implementation("biz.k11i:xgboost-predictor:0.3.1")
-    implementation("com.google.code.gson:gson:2.10.1")
 }

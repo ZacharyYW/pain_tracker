@@ -23,6 +23,7 @@ googleServices = "4.4.1"
 firebaseBom = "32.8.0"
 lifecycleViewmodelCompose = "2.10.0"
 playServicesAuth = "21.5.1"
+xgboostPredictor = "0.3.18"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -54,6 +55,7 @@ firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
 firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
+xgboost-predictor = { group = "ai.h2o", name = "xgboost-predictor", version.ref = "xgboostPredictor" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
