@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.onEach
 import android.util.Log
 import com.example.pain_tracker.repository.FirestoreRepository
 import kotlinx.coroutines.launch
+import com.example.pain_tracker.model.CorrectionRecord
+import com.example.pain_tracker.model.peakLevelToClass
 
 class DashboardViewModel : ViewModel() {
 
@@ -98,6 +100,9 @@ class DashboardViewModel : ViewModel() {
     }
 
     fun updateSession(id: Long, sh: Int, sm: Int, eh: Int, em: Int, peak: Float, sx: Set<Symptom>, notes: String) {
+        // Find the session before updating so we can detect pain level changes on watch sessions
+        val original = _displayedSessions.value.find { it.id == id }
+
         _displayedSessions.update { list ->
             list.map { s ->
                 if (s.id == id) {
@@ -106,14 +111,61 @@ class DashboardViewModel : ViewModel() {
                     val start = cal.timeInMillis
                     cal.set(Calendar.HOUR_OF_DAY, eh); cal.set(Calendar.MINUTE, em)
                     val end = cal.timeInMillis
-                    s.copy(startTime = start, endTime = end, peakLevel = peak,
-                        zones = buildZones(peak, ((end - start) / 60_000).toInt().coerceAtLeast(1)),
-                        symptoms = sx, notes = notes)
+                    val totalMins = ((end - start) / 60_000).toInt().coerceAtLeast(1)
+
+                    // For watch sessions: only rebuild zones if the peak level actually changed.
+                    // If peak is unchanged, keep the ML-derived zones so the zone bar stays accurate.
+                    val updatedZones = if (s.source == SessionSource.SMARTWATCH && s.peakLevel == peak) {
+                        s.zones
+                    } else {
+                        buildZones(peak, totalMins)
+                    }
+
+                    s.copy(
+                        startTime = start, endTime = end, peakLevel = peak,
+                        zones = updatedZones, symptoms = sx, notes = notes
+                    )
                 } else s
             }
         }
         refreshDisplayedScore()
         closeAddSheet()
+
+        val updated = _displayedSessions.value.find { it.id == id } ?: return
+
+        viewModelScope.launch {
+            // 1. Sync edit to Firestore
+            runCatching {
+                FirestoreRepository.updateSessionFields(updated)
+            }.onFailure { e ->
+                Log.e("DashboardViewModel", "Failed to update session: ${e.message}")
+            }
+
+            // 2. If this was a watch session and the pain level changed, store a correction
+            //    for model retraining
+            if (original != null &&
+                original.source == SessionSource.SMARTWATCH &&
+                original.peakLevel != peak
+            ) {
+                val dominantPredicted = peakLevelToClass(original.peakLevel)
+                val windowTimestamps  = original.zones.map { it.hashCode().toLong() } // placeholder if windows not stored locally
+
+                runCatching {
+                    FirestoreRepository.saveCorrection(
+                        CorrectionRecord(
+                            sessionId            = id,
+                            timestamp            = System.currentTimeMillis(),
+                            originalPredicted    = dominantPredicted,
+                            correctedPainLevel   = peak,
+                            correctedClass       = peakLevelToClass(peak),
+                            windowTimestamps     = windowTimestamps,
+                        )
+                    )
+                }.onFailure { e ->
+                    Log.e("DashboardViewModel", "Failed to save correction: ${e.message}")
+                }
+            }
+        }
     }
 
     fun deleteSession(id: Long) {

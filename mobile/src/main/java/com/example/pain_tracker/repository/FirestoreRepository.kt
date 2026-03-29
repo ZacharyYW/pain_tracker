@@ -1,5 +1,6 @@
 package com.example.pain_tracker.repository
 
+import com.example.pain_tracker.model.CorrectionRecord
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.Query.Direction
@@ -58,6 +59,42 @@ object FirestoreRepository {
 
     suspend fun deleteSession(id: Long) {
         sessionsCollection().document(id.toString()).delete().await()
+    }
+
+    /** Updates specific fields on an existing session document. */
+    suspend fun updateSessionFields(session: PainSession) {
+        sessionsCollection().document(session.id.toString())
+            .update(
+                mapOf(
+                    "startTime" to session.startTime,
+                    "endTime"   to session.endTime,
+                    "peakLevel" to session.peakLevel,
+                    "symptoms"  to session.symptoms.map { it.name },
+                    "notes"     to session.notes,
+                    "zones"     to session.zones.map { zoneToMap(it) },
+                )
+            ).await()
+    }
+
+    /**
+     * Saves a correction record under a separate top-level collection.
+     * Keyed by sessionId so duplicate corrections overwrite rather than accumulate.
+     * The retraining script reads from users/{uid}/corrections/.
+     */
+    suspend fun saveCorrection(correction: CorrectionRecord) {
+        db.collection("users").document(userId)
+            .collection("corrections")
+            .document(correction.sessionId.toString())
+            .set(
+                mapOf(
+                    "sessionId"          to correction.sessionId,
+                    "timestamp"          to correction.timestamp,
+                    "originalPredicted"  to correction.originalPredicted,
+                    "correctedPainLevel" to correction.correctedPainLevel,
+                    "correctedClass"     to correction.correctedClass,
+                    "windowTimestamps"   to correction.windowTimestamps,
+                )
+            ).await()
     }
 
     // ── Read ───────────────────────────────────────────────────────────────
