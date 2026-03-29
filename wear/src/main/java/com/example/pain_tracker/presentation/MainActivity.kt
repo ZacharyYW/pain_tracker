@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.Text
-
+import com.example.pain_tracker.presentation.theme.TypewriterFont
 // color palette
 private val BgColor       = Color(0xFFFCF4EC)
 private val Surface1      = Color(0xFF7A9B6A)
@@ -77,21 +77,6 @@ class MainActivity : ComponentActivity() {
 
         syncManager = WatchDataSyncManager(this)
 
-        /*com.google.android.gms.wearable.Wearable.getDataClient(this)
-            .getDataItems(
-                android.net.Uri.parse("wear://*/pain_entry/"),
-                com.google.android.gms.wearable.DataClient.FILTER_PREFIX
-            )
-            .addOnSuccessListener { items ->
-                Log.d("PainTracker", "clearing ${items.count} old items from data layer")
-                items.forEach { item ->
-                    com.google.android.gms.wearable.Wearable.getDataClient(this)
-                        .deleteDataItems(item.uri)
-                }
-                items.release()
-            }*/
-
-         */
 
         // when ecg finishes (success or fail), re-enable buttons and try to sync
         healthTrackingManager.onEcgComplete = { success ->
@@ -141,6 +126,7 @@ class MainActivity : ComponentActivity() {
                     text = statusMessage,
                     color = TextPrimary,
                     fontSize = 12.sp,
+                    fontFamily = TypewriterFont,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
@@ -149,6 +135,7 @@ class MainActivity : ComponentActivity() {
                     text = "Log Pain",
                     color = TextPrimary,
                     fontSize = 14.sp,
+                    fontFamily = TypewriterFont,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
@@ -194,6 +181,7 @@ class MainActivity : ComponentActivity() {
                                 text = "$level",
                                 color = TextPrimary,
                                 fontSize = 14.sp,
+                                fontFamily = TypewriterFont,
                                 fontWeight = FontWeight.Bold
                             )
                         }

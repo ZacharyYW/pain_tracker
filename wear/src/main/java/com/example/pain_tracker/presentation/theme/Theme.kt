@@ -1,7 +1,8 @@
 package com.example.pain_tracker.presentation.theme
 
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.wear.compose.material3.MaterialTheme
 
 @Composable
 fun Pain_trackerTheme(
@@ -12,6 +13,7 @@ fun Pain_trackerTheme(
      * See: https://developer.android.com/jetpack/compose/designsystems/custom
      */
     MaterialTheme(
+        typography = AppTypography,
         content = content
     )
 }

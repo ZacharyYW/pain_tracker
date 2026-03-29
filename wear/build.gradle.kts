@@ -53,6 +53,7 @@ dependencies {
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.gson)
+    implementation("androidx.compose.material3:material3:1.x.x")
     implementation(fileTree("libs") { include("*.aar") })
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
