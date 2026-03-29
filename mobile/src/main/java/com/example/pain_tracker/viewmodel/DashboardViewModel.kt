@@ -27,6 +27,12 @@ class DashboardViewModel : ViewModel() {
     private val _weekScores = MutableStateFlow<List<DayScore>>(emptyList())
     val weekScores: StateFlow<List<DayScore>> = _weekScores.asStateFlow()
 
+    private val _selectedYear = MutableStateFlow(Calendar.getInstance().get(Calendar.YEAR))
+    val selectedYear: StateFlow<Int> = _selectedYear.asStateFlow()
+
+    private val _selectedMonth = MutableStateFlow(Calendar.getInstance().get(Calendar.MONTH))
+    val selectedMonth: StateFlow<Int> = _selectedMonth.asStateFlow()
+
     private val _selectedDay = MutableStateFlow(Calendar.getInstance().get(Calendar.DAY_OF_MONTH))
     val selectedDay: StateFlow<Int> = _selectedDay.asStateFlow()
 
@@ -41,6 +47,22 @@ class DashboardViewModel : ViewModel() {
 
     private val _showAddSheet = MutableStateFlow(false)
     val showAddSheet: StateFlow<Boolean> = _showAddSheet.asStateFlow()
+
+    private val _showPeriodSheet = MutableStateFlow(false)
+    val showPeriodSheet: StateFlow<Boolean> = _showPeriodSheet.asStateFlow()
+
+    // set of "yyyy-MM-dd" strings marking period days
+    private val _periodDays = MutableStateFlow<Set<String>>(emptySet())
+    val periodDays: StateFlow<Set<String>> = _periodDays.asStateFlow()
+
+    fun openPeriodSheet() { _showPeriodSheet.value = true }
+    fun closePeriodSheet() { _showPeriodSheet.value = false }
+
+    fun logPeriod(year: Int, month: Int, day: Int, flow: Int, symptoms: Set<String>, notes: String) {
+        val key = "%04d-%02d-%02d".format(year, month + 1, day)
+        _periodDays.update { it + key }
+        closePeriodSheet()
+    }
 
     private val _expandedId = MutableStateFlow<Long?>(null)
     val expandedId: StateFlow<Long?> = _expandedId.asStateFlow()
@@ -104,23 +126,43 @@ class DashboardViewModel : ViewModel() {
     // ─── calendar logic ───────────────────────────────────────────────────────
 
     fun selectDay(year: Int, month: Int, dayOfMonth: Int, dayScore: DayScore?) {
+        // FIXED: Save the full date
+        _selectedYear.value = year
+        _selectedMonth.value = month
         _selectedDay.value = dayOfMonth
-        // If it's a mock day from our map, load its sessions
+
         val scoreFromMap = _monthScores.value[dayOfMonth]
         _displayedScore.value = scoreFromMap ?: dayScore
         _displayedSessions.value = scoreFromMap?.sessions ?: dayScore?.sessions ?: emptyList()
 
-        val today = Calendar.getInstance().apply { firstDayOfWeek = Calendar.SUNDAY; set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY); set(Calendar.HOUR_OF_DAY, 0) }
-        val target = Calendar.getInstance().apply { set(year, month, dayOfMonth); firstDayOfWeek = Calendar.SUNDAY; set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY); set(Calendar.HOUR_OF_DAY, 0) }
-        _weekOffset.value = Math.round((target.timeInMillis - today.timeInMillis) / (1000.0 * 60 * 60 * 24 * 7)).toInt()
+        val today = Calendar.getInstance().apply {
+            firstDayOfWeek = Calendar.SUNDAY
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            while (get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) { add(Calendar.DAY_OF_MONTH, -1) }
+        }
+
+        val target = Calendar.getInstance().apply {
+            set(Calendar.YEAR, year); set(Calendar.MONTH, month); set(Calendar.DAY_OF_MONTH, dayOfMonth)
+            firstDayOfWeek = Calendar.SUNDAY
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+            while (get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) { add(Calendar.DAY_OF_MONTH, -1) }
+        }
+
+        val diffMs = target.timeInMillis - today.timeInMillis
+        val diffWeeks = Math.round(diffMs / (1000.0 * 60 * 60 * 24 * 7)).toInt()
+        _weekOffset.value = diffWeeks
     }
 
     fun resetToToday() {
         val today = Calendar.getInstance()
-        val day = today.get(Calendar.DAY_OF_MONTH)
+
+        // FIXED: Reset the full date
+        _selectedYear.value = today.get(Calendar.YEAR)
+        _selectedMonth.value = today.get(Calendar.MONTH)
+        _selectedDay.value = today.get(Calendar.DAY_OF_MONTH)
+
         _weekOffset.value = 0
-        _selectedDay.value = day
-        val todayScore = _monthScores.value[day]
+        val todayScore = _monthScores.value[_selectedDay.value]
         _displayedScore.value = todayScore
         _displayedSessions.value = todayScore?.sessions ?: emptyList()
     }
