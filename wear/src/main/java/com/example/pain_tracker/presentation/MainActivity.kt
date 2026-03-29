@@ -177,7 +177,7 @@ class MainActivity : ComponentActivity() {
                                     statusMessage = "wait ${secondsLeft}s"
                                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                                         statusMessage = "logged & synced"
-                                    }, 2000)
+                                    }, 1000)
                                 }
                             },
                             enabled = !ecgInProgress,

@@ -2,16 +2,33 @@ package com.example.pain_tracker.presentation
 
 import android.content.Context
 import android.util.Log
-import com.google.android.gms.wearable.DataClient
-import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
+import com.google.gson.Gson
 
 class WatchDataSyncManager(private val context: Context) {
 
-    private val dataClient: DataClient = Wearable.getDataClient(context)
+    private val messageClient = Wearable.getMessageClient(context)
+    private val nodeClient = Wearable.getNodeClient(context)
+    private val gson = Gson()
 
-    // push all ready entries to phone via data layer
-    // each entry goes as its own data item keyed by uuid
+    companion object {
+        // must match WearableDataListenerService.MESSAGE_PATH on the phone
+        private const val MESSAGE_PATH = "/pain_tracker/session"
+    }
+
+    // json shape that WatchSessionParser expects
+    private data class WatchRow(
+        val timestamp: Long,
+        val hr: Float,
+        val ibi: List<Int>,
+        val ecg: List<Float>,
+        val pain_level: Int
+    )
+
+    private data class WatchSession(
+        val rows: List<WatchRow>
+    )
+
     fun syncPendingEntries() {
         val entries = DataRepository.getReadyToSync()
         if (entries.isEmpty()) {
@@ -21,42 +38,42 @@ class WatchDataSyncManager(private val context: Context) {
 
         Log.d("PainTracker", "sync: ${entries.size} entries to send")
 
-        for (entry in entries) {
-            val request = PutDataMapRequest.create("/pain_entry/${entry.id}").apply {
-                dataMap.putString("id", entry.id)
-                dataMap.putLong("timestamp", entry.timestamp)
-                dataMap.putInt("pain_level", entry.painLevel)
-
-                // flatten the window into parallel arrays for the data map
-                val timestamps = entry.windowOfReadings.map { it.timestamp }.toLongArray()
-                val heartRates = ArrayList(entry.windowOfReadings.map { it.heartRate })
-
-                // ibi is a list of lists, pipe-join each one to match training format
-                val ibiStrings = entry.windowOfReadings.map {
-                    it.ibiList.joinToString("|")
-                }.toTypedArray()
-
-                dataMap.putLongArray("window_timestamps", timestamps)
-                dataMap.putIntegerArrayList("window_heart_rates", heartRates)
-                dataMap.putStringArray("window_ibi_strings", ibiStrings)
-
-                // ecg as float array
-                dataMap.putFloatArray("ecg_values", entry.ecgReadings.toFloatArray())
-
+        // find the connected phone node first
+        nodeClient.connectedNodes.addOnSuccessListener { nodes ->
+            val phoneNode = nodes.firstOrNull()
+            if (phoneNode == null) {
+                Log.e("PainTracker", "sync: no connected phone found")
+                return@addOnSuccessListener
             }
 
-            val putRequest = request.asPutDataRequest().setUrgent()
-            val entryId = entry.id
+            for (entry in entries) {
+                // convert each reading in the window to a json row
+                // ecg and pain_level are the same for every row, matching csv training format
+                val rows = entry.windowOfReadings.map { reading ->
+                    WatchRow(
+                        timestamp = reading.timestamp,
+                        hr = reading.heartRate.toFloat(),
+                        ibi = reading.ibiList,
+                        ecg = entry.ecgReadings,
+                        pain_level = entry.painLevel
+                    )
+                }
 
-            dataClient.putDataItem(putRequest)
-                .addOnSuccessListener {
-                    Log.d("PainTracker", "sync: sent entry $entryId")
-                    DataRepository.removeSyncedEntries(listOf(entryId))
-                }
-                .addOnFailureListener { e ->
-                    // entry stays in DataRepository, will retry next sync call
-                    Log.e("PainTracker", "sync: failed to send $entryId: ${e.message}")
-                }
+                val json = gson.toJson(WatchSession(rows))
+                val entryId = entry.id
+                Log.d("PainTracker", "sync payload preview: ${json.take(500)}")
+                Log.d("PainTracker", "sync: rows=${rows.size}, pain=${entry.painLevel}, ecg_count=${entry.ecgReadings.size}")
+                messageClient.sendMessage(phoneNode.id, MESSAGE_PATH, json.toByteArray())
+                    .addOnSuccessListener {
+                        Log.d("PainTracker", "sync: sent entry $entryId (${json.length} bytes)")
+                        DataRepository.removeSyncedEntries(listOf(entryId))
+                    }
+                    .addOnFailureListener { e ->
+                        Log.e("PainTracker", "sync: failed to send $entryId: ${e.message}")
+                    }
+            }
+        }.addOnFailureListener { e ->
+            Log.e("PainTracker", "sync: failed to find nodes: ${e.message}")
         }
     }
 }

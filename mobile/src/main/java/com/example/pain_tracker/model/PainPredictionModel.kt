@@ -24,7 +24,7 @@ class PainPredictionModel(context: Context) {
     private val scalerScale: DoubleArray
 
     init {
-        val modelStream = context.assets.open("base_model.json")
+        val modelStream = context.assets.open("base_model.bin")
         predictor = Predictor(modelStream)
 
         val scalerStream = context.assets.open("scaler_params.json")
