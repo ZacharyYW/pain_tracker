@@ -21,16 +21,6 @@ class HealthTrackingManager(
     private var heartRateTracker: HealthTracker? = null
 
     private var ecgTracker: HealthTracker? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
-
-    // 30 second max for on-demand ECG per samsung docs
-    private var ecgTimeoutRunnable: Runnable? = null
-    private val ECG_TIMEOUT_MS = 30_000L
-
-    // callback so mainactivity knows when ecg is done
-    var onEcgComplete: ((success: Boolean) -> Unit)? = null
-
-    private var trackingStarted = false
     private val connectionListener = object : ConnectionListener {
         override fun onConnectionSuccess() {
             Log.d("PainTracker", "connection success")
@@ -52,73 +42,37 @@ class HealthTrackingManager(
         healthTrackingService = service
         service.connectService()
     }
-
-    // flag to prevent race conditions from multiple callbacks
-    private var ecgCaptured = false
-
     fun triggerEcg() {
         val service = healthTrackingService ?: return
-        ecgCaptured = false
 
         ecgTracker = service.getHealthTracker(HealthTrackerType.ECG_ON_DEMAND)
 
-        // start the 30s timeout - if we never get a valid reading, give up
-        ecgTimeoutRunnable = Runnable {
-            Log.d("PainTracker", "ecg timed out after ${ECG_TIMEOUT_MS / 1000}s")
-            ecgTracker?.unsetEventListener()
-            mainHandler.post {
-                onStatusChange("ecg timed out - no valid contact")
-                onEcgComplete?.invoke(false)
-            }
-        }
-        mainHandler.postDelayed(ecgTimeoutRunnable!!, ECG_TIMEOUT_MS)
-
         ecgTracker?.setEventListener(object : HealthTracker.TrackerEventListener {
             override fun onDataReceived(dataPoints: List<DataPoint>) {
-                if (dataPoints.isEmpty()) return
-
-                // already got what we need, ignore any trailing callbacks
-                if (ecgCaptured) return
-
-                val leadOff = dataPoints[0].getValue(ValueKey.EcgSet.LEAD_OFF)
-                Log.d("PainTracker", "ecg lead off status: $leadOff")
-
-                if (leadOff == 0) {
-                    // lock out any further callbacks immediately
-                    ecgCaptured = true
-
-                    val ecgValues = dataPoints.map { it.getValue(ValueKey.EcgSet.ECG_MV) }
-                    DataRepository.addEcgReading(ecgValues)
-
-                    ecgTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-                    ecgTracker?.unsetEventListener()
-
-                    mainHandler.post {
-                        onStatusChange("ecg captured: ${ecgValues.size} values")
-                        onEcgComplete?.invoke(true)
-                    }
-                    Log.d("PainTracker", "ecg received: ${ecgValues.size} values")
-                } else if (leadOff == 5) {
-                    Log.d("PainTracker", "ecg no contact, waiting for finger...")
-                    mainHandler.post {
-                        onStatusChange("no contact - place finger on crown")
-                    }
-                } else {
-                    Log.d("PainTracker", "ecg lead off status $leadOff, waiting...")
+                dataPoints.forEach {
+                    val status = it.getValue(ValueKey.EcgSet.LEAD_OFF)
+                    Log.d("PainTracker", "ecg status (lead off): $status")
                 }
+                val ecgValues = dataPoints.map { it.getValue(ValueKey.EcgSet.ECG_MV) }
+                DataRepository.addEcgReading(ecgValues, context)
+
+                // unset immediately after receiving - on-demand should only fire once
+                ecgTracker?.unsetEventListener()
+
+                Handler(Looper.getMainLooper()).post {
+                    onStatusChange("ecg captured: ${ecgValues.size} values")
+                }
+                Log.d("PainTracker", "ecg received: ${ecgValues.size} values")
             }
             override fun onFlushCompleted() {}
             override fun onError(error: HealthTracker.TrackerError) {
                 Log.d("PainTracker", "ecg error: $error")
-                ecgTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
-                mainHandler.post {
+                Handler(Looper.getMainLooper()).post {
                     onStatusChange("ecg error: $error")
-                    onEcgComplete?.invoke(false)
                 }
             }
         })
     }
-
     private fun startHeartRateTracking() {
         val service = healthTrackingService ?: return
 
@@ -141,12 +95,8 @@ class HealthTrackingManager(
 
                 // onDataReceived fires on a background thread, so UI updates
                 // need to be posted to the main thread explicitly
-                // only update status on first reading so it doesn't overwrite ecg messages
-                if (!trackingStarted) {
-                    trackingStarted = true
-                    Handler(Looper.getMainLooper()).post {
-                        onStatusChange("ready")
-                    }
+                Handler(Looper.getMainLooper()).post {
+                    onStatusChange("tracking | HR: $hr")
                 }
 
                 Log.d("PainTracker", "HR: $hr, IBI: $ibiList")
@@ -162,8 +112,6 @@ class HealthTrackingManager(
     }
 
     fun disconnect() {
-        // clean up timeout if ecg is still running
-        ecgTimeoutRunnable?.let { mainHandler.removeCallbacks(it) }
         heartRateTracker?.unsetEventListener()
         ecgTracker?.unsetEventListener()
         healthTrackingService?.disconnectService()

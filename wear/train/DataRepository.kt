@@ -1,7 +1,5 @@
 package com.example.pain_tracker.presentation
 import android.util.Log
-import java.util.UUID
-
 // one second of sensor data from the watch
 data class SensorReading(
     val timestamp: Long,
@@ -11,7 +9,6 @@ data class SensorReading(
 
 // a pain log event - stores the window of readings leading up to the button press
 data class PainLogEntry(
-    val id: String = UUID.randomUUID().toString(),   // unique id for sync tracking
     val timestamp: Long,
     val painLevel: Int,
     val windowOfReadings: List<SensorReading>,
@@ -23,14 +20,20 @@ object DataRepository {
     // how many seconds of data to keep before a pain log press
     // roughly 1 reading/sec so 30 = 30 seconds, tweak as needed
     private const val WINDOW_SIZE = 30
+    private val sessionTimestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+    // ^ for session timestamp for export csv
 
     // the rolling window - at any point this holds the last WINDOW_SIZE readings
     private val slidingWindow = ArrayDeque<SensorReading>()
 
+    // full history kept separately for CSV export
+    private val allReadings = mutableListOf<SensorReading>()
     private val painLogEntries = mutableListOf<PainLogEntry>()
 
     // called every ~1 second by HealthTrackingManager
     fun addSensorReading(reading: SensorReading) {
+        allReadings.add(reading)
+
         slidingWindow.addLast(reading)
         if (slidingWindow.size > WINDOW_SIZE) {
             slidingWindow.removeFirst()
@@ -51,26 +54,42 @@ object DataRepository {
             )
         )
     }
-
-    fun addEcgReading(ecgValues: List<Float>) {
-        val latest = painLogEntries.lastOrNull() ?: return // most recent pain log entry
+    fun addEcgReading(ecgValues: List<Float>, context: android.content.Context) {
+        val latest = painLogEntries.lastOrNull() ?: return // most recent pain log entry (30 second delay)
         latest.ecgReadings.addAll(ecgValues)
         Log.d("PainTracker", "ecg added to latest entry: ${ecgValues.size} values")
         Log.d("PainTracker", "ecg values: $ecgValues")
+        writeToFile(context);
     }
 
+    fun getAllReadings(): List<SensorReading> = allReadings.toList()
     fun getPainLogEntries(): List<PainLogEntry> = painLogEntries.toList()
 
-    // grab entries that are ready to send (have ecg data attached)
-    fun getReadyToSync(): List<PainLogEntry> {
-        return painLogEntries.filter { it.ecgReadings.isNotEmpty() }
-    }
+    // CSV export for Zach - each pain log entry expands into one row per reading in its window
+    // format: timestamp, hr, ibi (pipe-separated), pain_level
+    fun exportAsCsv(): String {
+        val sb = StringBuilder()
+        sb.appendLine("timestamp,hr,ibi,pain_level,ecg")
 
-    // called after successful data layer push - free up watch memory
-    fun removeSyncedEntries(ids: List<String>) {
-        painLogEntries.removeAll { it.id in ids }
-        Log.d("PainTracker", "removed ${ids.size} synced entries from watch")
-    }
+        // unlabeled readings - pain_level = -1, no ecg since ecg is only captured on pain log
+        for (reading in allReadings) {
+            sb.appendLine("${reading.timestamp},${reading.heartRate},${reading.ibiList.joinToString("|")},-1,")
+        }
 
-    fun getWindowSize(): Int = slidingWindow.size
+        // each reading in the window gets the pain label and the ecg snapshot from that event
+        for (entry in painLogEntries) {
+            val ecgString = entry.ecgReadings.joinToString("|")
+            for (reading in entry.windowOfReadings) {
+                sb.appendLine("${reading.timestamp},${reading.heartRate},${reading.ibiList.joinToString("|")},${entry.painLevel},$ecgString")
+            }
+        }
+
+        return sb.toString()
+    }
+    fun writeToFile(context: android.content.Context) {
+        val filename = "pain_tracker_$sessionTimestamp.csv"
+        val file = java.io.File(context.getExternalFilesDir(null), filename)
+        file.writeText(exportAsCsv())
+        Log.d("PainTracker", "csv written to ${file.absolutePath}")
+    }
 }
