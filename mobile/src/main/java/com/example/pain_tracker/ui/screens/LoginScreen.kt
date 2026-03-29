@@ -5,6 +5,15 @@ import android.R.id.background
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOutQuart
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -38,8 +47,21 @@ private val TextPrimary = Color(0xFF6B3820)
 private val TextOnSurface = Color(0xFFFFFFFF)
 
 private val TextMuted   = Color(0xFF887D7D)
+
+
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
+// State for the zoom level
+    val scale = remember { Animatable(1.2f) } // Start 20% larger
+
+    LaunchedEffect(Unit) {
+        // Zoom into the final size (1.0f) over 1.5 seconds
+        scale.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 1500, easing = EaseOutQuart)
+        )
+    }
+
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -92,7 +114,9 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 .size(600.dp) // Make it big so it "peeks" in
                 .align(Alignment.TopStart)
                 .offset(x = (-190).dp, y = (-330).dp) // Push it slightly off-screen
-                .graphicsLayer(rotationZ = 170f, alpha = 0.5f),
+                .graphicsLayer(scaleX = scale.value,
+                    scaleY = scale.value,
+                    rotationZ = 170f, alpha = 0.5f),
                  // Rotate and fade
             contentScale = ContentScale.Fit
         )
@@ -105,7 +129,8 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 .size(650.dp)
                 .align(Alignment.BottomEnd)
                 .offset(x = 170.dp, y = 230.dp) // Peek out from bottom
-                .graphicsLayer(rotationZ = -5f, alpha = 0.5f), // Flip it around
+                .graphicsLayer(scaleX = scale.value,
+                    scaleY = scale.value,rotationZ = -5f, alpha = 0.5f), // Flip it around
             contentScale = ContentScale.Fit
         )
     Column(
