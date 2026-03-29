@@ -13,7 +13,7 @@ class PredictionPipeline(private val model: PainPredictionModel) {
         val timestamp: Long,
         val predicted: Int,
         val actual: Int,
-        val features: List<Float> // --- NEW: Store the features ---
+        val features: List<Float>
     )
 
     data class SessionResult(

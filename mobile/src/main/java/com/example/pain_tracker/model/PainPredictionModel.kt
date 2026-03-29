@@ -41,7 +41,6 @@ class PainPredictionModel(context: Context) {
         scalerScale = scalerData.scale.toDoubleArray()
     }
 
-    // --- NEW: Return a Pair of (Prediction, Features Array) ---
     fun extractFeaturesAndPredict(window: List<RawSensorRow>): Pair<Int, FloatArray>? {
         if (window.size != WINDOW_SIZE) return null
 

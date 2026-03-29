@@ -30,7 +30,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
-import com.example.pain_tracker.repository.FirestoreRepository
 
 // ── colour palette ────────────────────────────────────────────────────────────
 private val BgColor      = Color(0xFFFCF4EC)
@@ -154,7 +153,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 label = { Text("email") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                // FIX 1: Explicitly tell the OS this is an email field to prevent file path suggestions
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, autoCorrect = false),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Border,
@@ -171,7 +169,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                // Fix 2: Explicitly tell the OS this is a password field
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrect = false),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Border,
@@ -199,7 +196,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                                 .addOnCompleteListener { task ->
                                     isLoading = false
                                     if (task.isSuccessful) {
-                                        FirestoreRepository.downloadPersonalizedModel(context)
                                         onLoginSuccess()
                                     }
                                     else errorMessage = task.exception?.localizedMessage ?: "login failed"

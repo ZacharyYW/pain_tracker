@@ -9,7 +9,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # Initialize Firebase Admin SDK
 cred = credentials.Certificate(os.path.join(BASE_DIR, 'service_account.json'))
 
-# REPLACE with your actual Firebase Storage bucket name (e.g., 'your-app-123.appspot.com')
 firebase_admin.initialize_app(cred, {
     'storageBucket': 'paintracker-8e802.appspot.com'
 })
@@ -83,6 +82,5 @@ def retrain_and_upload(user_id: str):
         print(f"FAILED to upload to Firebase Storage. Did you set the storageBucket? Error: {e}")
 
 if __name__ == '__main__':
-    # Replace with a real Firebase UID to test
     TARGET_USER = 'BwUsm4bKgeS7eKZscfUCYpajBp83'
     retrain_and_upload(TARGET_USER)
