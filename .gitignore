@@ -15,3 +15,4 @@
 local.properties
 ML/venv/
 pain_tracker_data/
+ML/service_account.json
