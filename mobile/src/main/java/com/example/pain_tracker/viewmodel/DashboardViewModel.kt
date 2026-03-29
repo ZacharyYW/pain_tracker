@@ -362,6 +362,15 @@ class DashboardViewModel : ViewModel() {
                 ))
             } else current
         }
+
+        // ADDED: Save the watch session to Firestore
+        viewModelScope.launch {
+            runCatching {
+                FirestoreRepository.saveWatchSession(newSession, result)
+            }.onFailure { e ->
+                Log.e("DashboardViewModel", "Failed to save watch session to Firestore: ${e.message}")
+            }
+        }
     }
 
     /**
