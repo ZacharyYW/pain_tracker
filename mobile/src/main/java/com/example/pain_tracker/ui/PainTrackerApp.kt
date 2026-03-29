@@ -20,6 +20,7 @@ import com.example.pain_tracker.ui.screens.DashboardScreen
 import com.example.pain_tracker.ui.screens.DevicePairingScreen
 import com.example.pain_tracker.ui.screens.LoginScreen
 import com.example.pain_tracker.ui.screens.FallingLeavesLoadingScreen // Ensure you create this file
+import com.example.pain_tracker.ui.screens.ProfileScreen
 
 // ── colours matching DashboardScreen palette ──────────────────────────────────
 private val BgColor     = Color(0xFFFCF4EC)
@@ -51,7 +52,7 @@ fun ProfilePlaceholder() {
 }
 
 @Composable
-fun MainShell() {
+fun MainShell(onSignOutRequested: () -> Unit) {
     var selectedTab by remember { mutableStateOf(NavTab.CALENDAR) }
 
     Scaffold(
@@ -92,7 +93,7 @@ fun MainShell() {
             when (selectedTab) {
                 NavTab.CALENDAR -> DashboardScreen()
                 NavTab.INSIGHTS -> InsightsPlaceholder()
-                NavTab.PROFILE -> ProfilePlaceholder()
+                NavTab.PROFILE -> ProfileScreen(onSignOut = onSignOutRequested)
             }
         }
     }
@@ -129,7 +130,13 @@ fun PainTrackerApp() {
 
             // 4. Finally, show the dashboard
             else -> {
-                MainShell()
+                MainShell(
+                    onSignOutRequested = {
+                        isLoggedIn = false
+                        isPaired = false
+                        isLoadingComplete = false
+                    }
+                )
             }
         }
 
