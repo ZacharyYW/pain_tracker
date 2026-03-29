@@ -11,7 +11,7 @@ cred = credentials.Certificate(os.path.join(BASE_DIR, 'service_account.json'))
 
 # REPLACE with your actual Firebase Storage bucket name (e.g., 'your-app-123.appspot.com')
 firebase_admin.initialize_app(cred, {
-    'storageBucket': 'REPLACE_ME.appspot.com'
+    'storageBucket': 'paintracker-8e802.appspot.com'
 })
 
 db = firestore.client()
@@ -84,5 +84,5 @@ def retrain_and_upload(user_id: str):
 
 if __name__ == '__main__':
     # Replace with a real Firebase UID to test
-    TARGET_USER = 'PASTE_UID_HERE'
+    TARGET_USER = 'BwUsm4bKgeS7eKZscfUCYpajBp83'
     retrain_and_upload(TARGET_USER)
