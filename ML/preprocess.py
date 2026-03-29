@@ -1,3 +1,4 @@
+
 from sklearn.preprocessing import StandardScaler
 import joblib
 import pandas as pd
@@ -188,25 +189,7 @@ if __name__ == "__main__":
     df = load_and_clean_data()
     
     if df is not None:
-        # --- Step 7: Standardization ---
-        # Separate the raw features from our labels/metadata
-        feature_cols = [col for col in df.columns if col not in ['pain_level', 'person_id']]
-        X = df[feature_cols]
         
-        # Zach noted to fit on "training data only". 
-        # Since this script prepares the pooled data for the final base model, 
-        # the entire dataset acts as our training data here. 
-        # (Note: In your separate LOOCV evaluation script, you will need to scale dynamically per fold).
-        scaler = StandardScaler()
-        df[feature_cols] = scaler.fit_transform(X)
-        
-        # Save the scaler. The phone app needs this exact file to scale new watch data 
-        # before feeding it to the model.
-        scaler_path = os.path.join(BASE_DIR, 'scaler.pkl')
-        joblib.dump(scaler, scaler_path)
-        
-        print("\n--- Step 7 Complete ---")
-        print(f"Data standardized. Scaler saved to {scaler_path}")
 
         # --- Step 8: Save cleaned dataset ---
         output_path = os.path.join(BASE_DIR, 'processed_data.csv')
