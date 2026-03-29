@@ -12,6 +12,9 @@ import com.example.pain_tracker.model.PredictionPipeline
 import com.example.pain_tracker.repository.WatchSessionRepository
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import android.util.Log
+import com.example.pain_tracker.repository.FirestoreRepository
+import kotlinx.coroutines.launch
 
 class DashboardViewModel : ViewModel() {
 
@@ -51,6 +54,9 @@ class DashboardViewModel : ViewModel() {
     val expandedId: StateFlow<Long?> = _expandedId.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            FirestoreRepository.signInAnonymously()
+        }
         loadMockData()
         observeWatchSessions()
     }
@@ -81,6 +87,13 @@ class DashboardViewModel : ViewModel() {
         )
         _displayedSessions.update { it + newSession }
         refreshDisplayedScore()
+        viewModelScope.launch {
+            runCatching {
+                FirestoreRepository.saveManualSession(newSession)
+            }.onFailure { e ->
+                Log.e("DashboardViewModel", "Failed to save manual session: ${e.message}")
+            }
+        }
         closeAddSheet()
     }
 
@@ -106,6 +119,13 @@ class DashboardViewModel : ViewModel() {
     fun deleteSession(id: Long) {
         _displayedSessions.update { list -> list.filterNot { it.id == id } }
         refreshDisplayedScore()
+        viewModelScope.launch {
+            runCatching {
+                FirestoreRepository.deleteSession(id)
+            }.onFailure { e ->
+                Log.e("DashboardViewModel", "Failed to delete session: ${e.message}")
+            }
+        }
         closeAddSheet()
     }
 

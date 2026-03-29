@@ -52,7 +52,7 @@ gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 androidx-compose-material3-mobile = { group = "androidx.compose.material3", name = "material3", version.ref = "material3Mobile" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
-firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycleViewmodelCompose" }
 play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 xgboost-predictor = { group = "ai.h2o", name = "xgboost-predictor", version.ref = "xgboostPredictor" }
