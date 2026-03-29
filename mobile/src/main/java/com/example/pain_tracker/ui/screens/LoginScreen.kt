@@ -5,7 +5,17 @@ import android.R.id.background
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOutQuart
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -13,7 +23,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.pain_tracker.R // Ensure you import your R file
@@ -34,8 +47,21 @@ private val TextPrimary = Color(0xFF6B3820)
 private val TextOnSurface = Color(0xFFFFFFFF)
 
 private val TextMuted   = Color(0xFF887D7D)
+
+
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
+// State for the zoom level
+    val scale = remember { Animatable(1.2f) } // Start 20% larger
+
+    LaunchedEffect(Unit) {
+        // Zoom into the final size (1.0f) over 1.5 seconds
+        scale.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 1500, easing = EaseOutQuart)
+        )
+    }
+
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -74,9 +100,41 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             isLoading = false
         }
     }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgColor),
+        contentAlignment = Alignment.Center
+    ) {
+        // --- FERN 1: Top Left ---
+        Image(
+            painter = painterResource(id = R.drawable.fern_bg), // your png name
+            contentDescription = null,
+            modifier = Modifier
+                .size(600.dp) // Make it big so it "peeks" in
+                .align(Alignment.TopStart)
+                .offset(x = (-190).dp, y = (-330).dp) // Push it slightly off-screen
+                .graphicsLayer(scaleX = scale.value,
+                    scaleY = scale.value,
+                    rotationZ = 170f, alpha = 0.5f),
+                 // Rotate and fade
+            contentScale = ContentScale.Fit
+        )
 
+        // --- FERN 2: Bottom Right ---
+        Image(
+            painter = painterResource(id = R.drawable.fern_bg),
+            contentDescription = null,
+            modifier = Modifier
+                .size(650.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 170.dp, y = 230.dp) // Peek out from bottom
+                .graphicsLayer(scaleX = scale.value,
+                    scaleY = scale.value,rotationZ = -5f, alpha = 0.5f), // Flip it around
+            contentScale = ContentScale.Fit
+        )
     Column(
-        modifier = Modifier.background(BgColor).fillMaxSize().padding(24.dp),
+        modifier = Modifier.padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -161,7 +219,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
             border = BorderStroke(1.dp, Surface1), // Matches your Dashboard borders
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Surface1)
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = BgColor,contentColor = Surface1)
         ) {
             Text("sign in with Google")
         }
@@ -181,7 +239,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
-            colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextMuted)
+            colors = ButtonDefaults.buttonColors( containerColor = Color.Transparent, contentColor = TextMuted)
         ) {
             Text("continue without logging in")
         }
@@ -190,5 +248,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
             CircularProgressIndicator()
         }
+    }
     }
 }
