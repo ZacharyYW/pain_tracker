@@ -6,6 +6,7 @@ import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -13,7 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.pain_tracker.R // Ensure you import your R file
@@ -74,9 +78,38 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             isLoading = false
         }
     }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BgColor),
+        contentAlignment = Alignment.Center
+    ) {
+        // --- FERN 1: Top Left ---
+        Image(
+            painter = painterResource(id = R.drawable.fern_bg), // your png name
+            contentDescription = null,
+            modifier = Modifier
+                .size(600.dp) // Make it big so it "peeks" in
+                .align(Alignment.TopStart)
+                .offset(x = (-190).dp, y = (-330).dp) // Push it slightly off-screen
+                .graphicsLayer(rotationZ = 170f, alpha = 0.5f),
+                 // Rotate and fade
+            contentScale = ContentScale.Fit
+        )
 
+        // --- FERN 2: Bottom Right ---
+        Image(
+            painter = painterResource(id = R.drawable.fern_bg),
+            contentDescription = null,
+            modifier = Modifier
+                .size(650.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 170.dp, y = 230.dp) // Peek out from bottom
+                .graphicsLayer(rotationZ = -5f, alpha = 0.5f), // Flip it around
+            contentScale = ContentScale.Fit
+        )
     Column(
-        modifier = Modifier.background(BgColor).fillMaxSize().padding(24.dp),
+        modifier = Modifier.padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -161,7 +194,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
             border = BorderStroke(1.dp, Surface1), // Matches your Dashboard borders
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Surface1)
+            colors = ButtonDefaults.outlinedButtonColors(containerColor = BgColor,contentColor = Surface1)
         ) {
             Text("sign in with Google")
         }
@@ -181,7 +214,7 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = !isLoading,
-            colors = ButtonDefaults.buttonColors(containerColor = BgColor, contentColor = TextMuted)
+            colors = ButtonDefaults.buttonColors( containerColor = Color.Transparent, contentColor = TextMuted)
         ) {
             Text("continue without logging in")
         }
@@ -190,5 +223,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
             Spacer(modifier = Modifier.height(24.dp))
             CircularProgressIndicator()
         }
+    }
     }
 }
