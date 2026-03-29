@@ -32,11 +32,25 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.example.pain_tracker.R // Replace with your actual package
+
+@Composable
+fun getStatusImage(score: Int?): Int {
+    return when {
+        score == null -> R.drawable.status_empty
+        score >= 85 -> R.drawable.status_happiest
+        score >= 70 -> R.drawable.status_smile
+        score >= 55 -> R.drawable.status_meh
+        score >= 40 -> R.drawable.status_sad
+        score >= 25 -> R.drawable.status_tears
+        else -> R.drawable.status_saddest
+    }
+}
 
 // ── colour palette ────────────────────────────────────────────────────────────
 private val BgColor      = Color(0xFFFCF4EC) //cream 0xFFFCF4EC
@@ -67,7 +81,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     val selectedDay       by vm.selectedDay.collectAsState()
     val weekOffset        by vm.weekOffset.collectAsState()
 
-    // NEW: Pager State for swipeable weeks (starts at 5000 to allow infinite swiping both ways)
+    // Pager State for swipeable weeks (starts at 5000 to allow infinite swiping both ways)
     val pagerState = rememberPagerState(initialPage = 5000, pageCount = { 10000 })
     val coroutineScope = rememberCoroutineScope()
 
@@ -75,13 +89,13 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     val currentCal = remember(weekOffset) {
         val cal = Calendar.getInstance()
         cal.add(Calendar.WEEK_OF_YEAR, weekOffset)
-        // Adjust to the Thursday of that week to determine the month that "owns" this week
-        cal.set(Calendar.DAY_OF_WEEK, Calendar.WEDNESDAY)
+        cal.set(Calendar.DAY_OF_WEEK, Calendar.WEDNESDAY) // Logic from V2
         cal
     }
 
     val currentMonthYear = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(currentCal.time).lowercase()
-    // Generate dropdown options (e.g., 12 months back, 12 months forward)
+
+    // Generate dropdown options
     val monthOptions = remember {
         val cal = Calendar.getInstance()
         cal.add(Calendar.MONTH, -12)
@@ -98,18 +112,16 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     LaunchedEffect(weekOffset) {
         val targetPage = 5000 + weekOffset
         if (pagerState.currentPage != targetPage) {
-            // If we are jumping across multiple months, an animation will freeze the app.
-            // So, if the jump is larger than 3 weeks, we just instantly snap there.
+            // Jump logic from V2 to prevent animation freezing
             if (abs(pagerState.currentPage - targetPage) > 3) {
                 pagerState.scrollToPage(targetPage)
             } else {
-                // If it's a short jump, do the pretty slide animation!
                 pagerState.animateScrollToPage(targetPage)
             }
         }
     }
 
-    // Sync Pager -> ViewModel (When swiping left/right with your finger)
+    // Sync Pager -> ViewModel (When swiping left/right)
     LaunchedEffect(pagerState.settledPage) {
         val targetOffset = pagerState.settledPage - 5000
         if (weekOffset != targetOffset) {
@@ -130,7 +142,6 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 96.dp)) {
 
-            // Re-added the Month section that was missing in your last paste!
             item {
                 MonthCalendarSection(
                     monthScores = monthScores,
@@ -139,7 +150,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
                     currentCal = currentCal,
                     monthOptions = monthOptions,
                     onMonthSelect = { y, m -> vm.setMonth(y, m) },
-                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) }
+                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) } // V2 parameters
                 )
             }
             item { HorizontalDivider(color = Border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
@@ -151,8 +162,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
                     weekOffset = weekOffset,
                     pagerState = pagerState,
                     coroutineScope = coroutineScope,
-                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) },
-
+                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) }, // V2 parameters
                     onTodayClick = { vm.resetToToday() }
                 )
             }
@@ -173,7 +183,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
                     session = session,
                     expanded = expandedId == session.id,
                     onToggle = { vm.toggleSession(session.id) },
-                    onEdit = { vm.openAddSheet(session) }, // <--- Pass the edit logic here
+                    onEdit = { vm.openAddSheet(session) }, // V2 edit logic
                     onToggleSx = { sx -> vm.toggleSymptom(session.id, sx) },
                     onNotes = { notes -> vm.updateNotes(session.id, notes) }
                 )
@@ -181,17 +191,18 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
             item { displayedScore?.let { DayScoreSummary(it) } }
         }
     }
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val editingSession by vm.editingSession.collectAsState()
+    val editingSession by vm.editingSession.collectAsState() // V2 edit state
 
     if (showAddSheet) {
         ModalBottomSheet(
             onDismissRequest = { vm.closeAddSheet() },
             sheetState = sheetState,
-            containerColor = BgColor // Matches your cream background
+            containerColor = BgColor
         ) {
             AddSessionSheet(
-                existingSession = editingSession,
+                existingSession = editingSession, // V2 param
                 onSave = { sh, sm, eh, em, peak, sx, notes ->
                     if (editingSession != null) {
                         vm.updateSession(editingSession!!.id, sh, sm, eh, em, peak, sx, notes)
@@ -199,7 +210,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
                         vm.addManualSession(sh, sm, eh, em, peak, sx, notes)
                     }
                 },
-                onDelete = { session -> vm.deleteSession(session.id) }, // lambda now matches
+                onDelete = { session -> vm.deleteSession(session.id) }, // V2 param
                 onDismiss = { vm.closeAddSheet() }
             )
         }
@@ -224,7 +235,6 @@ fun MonthCalendarSection(
         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
 
-            // Interactive Dropdown Menu Box
             Box {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -243,7 +253,7 @@ fun MonthCalendarSection(
                     onDismissRequest = { expandedMonthMenu = false },
                     modifier = Modifier
                         .background(Surface1)
-                        .heightIn(max = 240.dp) // <-- ADD THIS LINE to limit to ~5 items
+                        .heightIn(max = 240.dp) // V2 logic: limit height
                 ) {
                     monthOptions.forEach { option ->
                         DropdownMenuItem(
@@ -266,21 +276,20 @@ fun MonthCalendarSection(
         AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    // CHANGED TO LOWERCASE HERE
+                    // V2 lowercase
                     listOf("s","m","t","w","t","f","s").forEach { d ->
                         Text(d, color = TextPrimary, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                     }
                 }
 
-                // Grab the year and month being displayed
+                // V2 variables needed for onDayClick
                 val currentYear = currentCal.get(Calendar.YEAR)
                 val currentMonth = currentCal.get(Calendar.MONTH)
 
-                // Calculate exact calendar grid offsets for accurate days
                 val daysInMonth = currentCal.getActualMaximum(Calendar.DAY_OF_MONTH)
                 val firstDayCal = currentCal.clone() as Calendar
                 firstDayCal.set(Calendar.DAY_OF_MONTH, 1)
-                val offset = firstDayCal.get(Calendar.DAY_OF_WEEK) - 1 // 0 for Sunday
+                val offset = firstDayCal.get(Calendar.DAY_OF_WEEK) - 1
                 val rows = (offset + daysInMonth + 6) / 7
                 var dayCounter = 1
 
@@ -295,15 +304,37 @@ fun MonthCalendarSection(
                                 val ds = monthScores[day]
                                 val isSelected = day == selectedDay
 
-                                Box(contentAlignment = Alignment.Center,
-                                    modifier = Modifier.weight(1f).aspectRatio(1f).padding(1.dp)
-                                        .clip(CircleShape).clickable { onDayClick(currentYear, currentMonth, day, ds) }
-                                        .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                                        .background(Surface2.copy(alpha = 0.04f))) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(scoreEmoji(ds?.score ?: 75), fontSize = 14.sp)
-                                        Text("$day", color = if (isSelected) PinkAccent else TextPrimary, fontSize = 8.sp)
+                                // V1 LAYOUT (Images with text safely underneath) + V2 CLICK LOGIC
+                                Column(
+                                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .aspectRatio(1f)
+                                            .padding(1.dp)
+                                            .clip(CircleShape)
+                                            .background(Surface2.copy(alpha = 0.04f))
+                                            .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
+                                            // V2 Click Logic:
+                                            .clickable { onDayClick(currentYear, currentMonth, day, ds) }
+                                    ) {
+                                        Image(
+                                            painter = painterResource(id = getStatusImage(ds?.score)),
+                                            contentDescription = "Pain status",
+                                            modifier = Modifier.size(30.dp),
+                                        )
                                     }
+
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = "$day",
+                                        color = if (isSelected) PinkAccent else TextPrimary,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 }
                             }
                         }
@@ -324,15 +355,16 @@ fun WeekStripSection(
     pagerState: PagerState,
     coroutineScope: CoroutineScope,
     onDayClick: (Int, Int, Int, DayScore?) -> Unit,
-    onTodayClick: () -> Unit // NEW Parameter
+    onTodayClick: () -> Unit
 ) {
+    // V2 labels
     val labels = listOf("sun","mon","tue","wed","thu","fri","sat")
 
     val weekLabel = when (weekOffset) {
         0 -> "this week"
         -1 -> "last week"
         1 -> "next week"
-        else -> if (weekOffset < 0) "${-weekOffset} weeks ago" else "in $weekOffset weeks" // Fixed wording logic
+        else -> if (weekOffset < 0) "${-weekOffset} weeks ago" else "in $weekOffset weeks"
     }
 
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
@@ -343,10 +375,7 @@ fun WeekStripSection(
         ) {
             Text(weekLabel, color = TextPrimary, fontSize = 11.sp)
 
-            // NEW: Added the 'today' button alongside the arrows
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-
-                // Only show "today" button if we are NOT on the current week
                 AnimatedVisibility(visible = weekOffset != 0) {
                     Text(
                         text = "today",
@@ -369,12 +398,12 @@ fun WeekStripSection(
             }
         }
 
-        // NEW: Swappable Horizontal Pager
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth()) { page ->
-
             val pageWeekOffset = page - 5000
             val loopCal = Calendar.getInstance()
             loopCal.add(Calendar.WEEK_OF_YEAR, pageWeekOffset)
+
+            // V2 loop logic (starts Sunday)
             while (loopCal.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
                 loopCal.add(Calendar.DAY_OF_MONTH, -1)
             }
@@ -387,16 +416,30 @@ fun WeekStripSection(
                     val isSelected = itemDay == selectedDay
                     val ds = scoresMap[itemDay]
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { onDayClick(itemYear, itemMonth, itemDay, ds) }.padding(vertical = 4.dp)) {
-
+                    // V1 UI layout + V2 parameters
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f).padding(vertical = 4.dp)
+                    ) {
                         Text(labels[i], color = if (isSelected) PinkAccent else TextPrimary, fontSize = 10.sp)
                         Spacer(Modifier.height(4.dp))
+
                         Box(contentAlignment = Alignment.Center,
-                            modifier = Modifier.size(38.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .padding(1.dp)
+                                .clip(CircleShape)
+                                .background(Surface2.copy(alpha = 0.04f))
                                 .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                                .clip(CircleShape).background(Surface2.copy(alpha = 0.04f))) {
-                            Text(scoreEmoji(ds?.score ?: 75), fontSize = 18.sp)
+                                // V2 Click Logic:
+                                .clickable { onDayClick(itemYear, itemMonth, itemDay, ds) }
+                        ) {
+                            Image(
+                                painter = painterResource(id = getStatusImage(ds?.score)),
+                                contentDescription = null,
+                                modifier = Modifier.size(30.dp),
+                            )
                         }
                         Spacer(Modifier.height(4.dp))
                         Text("$itemDay", color = if (isSelected) PinkAccent else TextPrimary, fontSize = 10.sp)
@@ -409,13 +452,12 @@ fun WeekStripSection(
 }
 
 // ── session card ──────────────────────────────────────────────────────────────
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SessionCard(
     session: PainSession,
     expanded: Boolean,
     onToggle: () -> Unit,
-    onEdit: () -> Unit,
+    onEdit: () -> Unit, // V2 Logic
     onToggleSx: (Symptom) -> Unit,
     onNotes: (String) -> Unit
 ) {
@@ -429,11 +471,11 @@ fun SessionCard(
     }
     val totalZ = session.zones.sumOf { it.durationMinutes }.toFloat().coerceAtLeast(1f)
     var localNotes by remember(session.id) { mutableStateOf(session.notes) }
-    Column(modifier = Modifier
-        .fillMaxWidth().padding(horizontal = 20.dp, vertical = 5.dp)
+
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 5.dp)
         .clip(RoundedCornerShape(14.dp)).background(Surface1)
-        .clickable { onToggle() }.padding(14.dp)
-    ) {
+        .border(0.5.dp, if (expanded) PinkAccent.copy(0.4f) else Border, RoundedCornerShape(14.dp))
+        .clickable { onToggle() }.padding(14.dp)) {
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
             Column {
@@ -467,8 +509,8 @@ fun SessionCard(
         AnimatedVisibility(visible = expanded) {
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 HorizontalDivider(color = Border, thickness = 0.5.dp)
-
-                Text("symptoms", color = TextOnSurface, fontSize = 11.sp)
+                Spacer(Modifier.height(12.dp))
+                Text("symptoms", color = TextOnSurface, fontSize = 11.sp) // V2 TextOnSurface
                 Spacer(Modifier.height(8.dp))
                 SymptomChips(
                     symptoms = Symptom.entries.toList(),
@@ -486,7 +528,7 @@ fun SessionCard(
                         focusedContainerColor = BgColor, unfocusedContainerColor = BgColor),
                     textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, color = TextPrimary))
 
-                // NEW: Dedicated Edit Button
+                // V2 Dedicated Edit Button
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = { onEdit() }) {
                         Text("edit", color = TextOnSurface, fontSize = 12.sp)
@@ -528,51 +570,20 @@ fun AddSessionSheet(
     onDelete: (PainSession) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val cal = Calendar.getInstance()
+    // V2 Logic applied fully here
+    fun getTimePart(ts: Long, field: Int): Int = Calendar.getInstance().apply { timeInMillis = ts }.get(field)
 
-    // Helper to get time parts
-    fun getTimePart(ts: Long, field: Int): Int =
-        Calendar.getInstance().apply { timeInMillis = ts }.get(field)
+    var startHour by remember { mutableIntStateOf(existingSession?.let { getTimePart(it.startTime, Calendar.HOUR_OF_DAY) } ?: 14) }
+    var startMinute by remember { mutableIntStateOf(existingSession?.let { getTimePart(it.startTime, Calendar.MINUTE) } ?: 30) }
+    var endHour by remember { mutableIntStateOf(existingSession?.let { getTimePart(it.endTime, Calendar.HOUR_OF_DAY) } ?: 15) }
+    var endMinute by remember { mutableIntStateOf(existingSession?.let { getTimePart(it.endTime, Calendar.MINUTE) } ?: 15) }
 
-    var startHour by remember {
-        mutableIntStateOf(existingSession?.let {
-            getTimePart(
-                it.startTime,
-                Calendar.HOUR_OF_DAY
-            )
-        } ?: 14)
-    }
-    var startMinute by remember {
-        mutableIntStateOf(existingSession?.let {
-            getTimePart(
-                it.startTime,
-                Calendar.MINUTE
-            )
-        } ?: 30)
-    }
-    var endHour by remember {
-        mutableIntStateOf(existingSession?.let {
-            getTimePart(
-                it.endTime,
-                Calendar.HOUR_OF_DAY
-            )
-        } ?: 15)
-    }
-    var endMinute by remember {
-        mutableIntStateOf(existingSession?.let {
-            getTimePart(
-                it.endTime,
-                Calendar.MINUTE
-            )
-        } ?: 15)
-    }
     var peakLevel by remember { mutableFloatStateOf(existingSession?.peakLevel ?: 5f) }
     var symptoms by remember { mutableStateOf(existingSession?.symptoms ?: emptySet()) }
     var notes by remember { mutableStateOf(existingSession?.notes ?: "") }
 
-    // FIXED: peakColor must be defined here so it can be used below
-    val peakColor =
-        if (peakLevel >= 7f) PinkAccent else if (peakLevel >= 4f) AmberAccent else GreenAccent
+    val peakColor = if (peakLevel >= 7f) PinkAccent else if (peakLevel >= 4f) AmberAccent else GreenAccent
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -585,27 +596,15 @@ fun AddSessionSheet(
             style = MaterialTheme.typography.headlineSmall
         )
 
+        Spacer(Modifier.height(16.dp))
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "start time",
-                    color = TextPrimary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
+                Text("start time", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
                 SimpleTimePicker(startHour, startMinute, { startHour = it }, { startMinute = it })
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "end time",
-                    color = TextPrimary,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
+                Text("end time", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
                 SimpleTimePicker(endHour, endMinute, { endHour = it }, { endMinute = it })
             }
         }
@@ -635,12 +634,7 @@ fun AddSessionSheet(
         )
 
         Spacer(Modifier.height(16.dp))
-        Text(
-            "symptoms",
-            color = TextPrimary,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        Text("symptoms", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
         SymptomChips(
             symptoms = Symptom.entries.toList(),
             isActive = { it in symptoms },
@@ -648,12 +642,7 @@ fun AddSessionSheet(
         )
 
         Spacer(Modifier.height(16.dp))
-        Text(
-            "notes",
-            color = TextPrimary,
-            fontSize = 12.sp,
-            modifier = Modifier.padding(bottom = 4.dp)
-        )
+        Text("notes", color = TextPrimary, fontSize = 12.sp, modifier = Modifier.padding(bottom = 4.dp))
         OutlinedTextField(
             value = notes, onValueChange = { notes = it },
             placeholder = { Text("optional notes...", color = TextPrimary, fontSize = 12.sp) },
@@ -667,24 +656,14 @@ fun AddSessionSheet(
         )
 
         Spacer(Modifier.height(20.dp))
-        // Save Button
+
         Button(
-            onClick = {
-                onSave(
-                    startHour,
-                    startMinute,
-                    endHour,
-                    endMinute,
-                    peakLevel,
-                    symptoms,
-                    notes
-                )
-            },
+            onClick = { onSave(startHour, startMinute, endHour, endMinute, peakLevel, symptoms, notes) },
             modifier = Modifier.fillMaxWidth().height(50.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Surface1)
         ) {
-            Text(if (existingSession != null) "save changes" else "save session")
+            Text(if (existingSession != null) "save changes" else "save session", color = Color.White)
         }
 
         if (existingSession != null) {
@@ -698,7 +677,6 @@ fun AddSessionSheet(
         }
     }
 }
-
 
 // ── symptom chips (wrapping rows, no FlowRow dependency) ─────────────────────
 @Composable
