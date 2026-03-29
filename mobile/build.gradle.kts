@@ -50,6 +50,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3.mobile)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     implementation(platform(libs.firebase.bom))
