@@ -34,6 +34,70 @@ private enum class NavTab(val label: String, val icon: ImageVector) {
     PROFILE("profile",  Icons.Default.Person)
 }
 
+
+// ── placeholder screens ───────────────────────────────────────────────────────
+@Composable
+fun InsightsPlaceholder() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("insights coming soon", color = Brown, fontSize = 16.sp)
+    }
+}
+
+@Composable
+fun ProfilePlaceholder() {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Text("profile coming soon", color = Brown, fontSize = 16.sp)
+    }
+}
+
+@Composable
+fun MainShell() {
+    var selectedTab by remember { mutableStateOf(NavTab.CALENDAR) }
+
+    Scaffold(
+        containerColor = BgColor,
+        bottomBar = {
+            NavigationBar(
+                containerColor = Brown,
+                contentColor = Color.White,
+                tonalElevation = 0.dp
+            ) {
+                NavTab.entries.forEach { tab ->
+                    val selected = selectedTab == tab
+                    NavigationBarItem(
+                        selected = selected,
+                        onClick = { selectedTab = tab },
+                        icon = {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label
+                            )
+                        },
+                        label = {
+                            Text(tab.label, fontSize = 10.sp)
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = Brown,
+                            selectedTextColor = Color.White,
+                            unselectedIconColor = BrownMuted,
+                            unselectedTextColor = BrownMuted,
+                            indicatorColor = BgColor
+                        )
+                    )
+                }
+            }
+        }
+    ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+            when (selectedTab) {
+                NavTab.CALENDAR -> DashboardScreen()
+                NavTab.INSIGHTS -> InsightsPlaceholder()
+                NavTab.PROFILE -> ProfilePlaceholder()
+            }
+        }
+    }
+}
+
 @Composable
 fun PainTrackerApp() {
     var isLoggedIn by remember { mutableStateOf(false) }
@@ -41,7 +105,10 @@ fun PainTrackerApp() {
     var isLoadingComplete by remember { mutableStateOf(false) }
 
     // Using Crossfade makes the transition between screens look much smoother
-    Crossfade(targetState = Triple(isLoggedIn, isPaired, isLoadingComplete), label = "app_flow") { (logged, paired, loaded) ->
+    Crossfade(
+        targetState = Triple(isLoggedIn, isPaired, isLoadingComplete),
+        label = "app_flow"
+    ) { (logged, paired, loaded) ->
         when {
             // 1. First, user must log in
             !logged -> {
@@ -62,77 +129,9 @@ fun PainTrackerApp() {
 
             // 4. Finally, show the dashboard
             else -> {
-                DashboardScreen()
+                MainShell()
             }
         }
-    var isPaired   by remember { mutableStateOf(false) }
 
-    when {
-        !isLoggedIn -> LoginScreen(onLoginSuccess = { isLoggedIn = true })
-        !isPaired   -> DevicePairingScreen(onPaired = { isPaired = true })
-        else        -> MainShell()
-    }
-}
-
-@Composable
-fun MainShell() {
-    var selectedTab by remember { mutableStateOf(NavTab.CALENDAR) }
-
-    Scaffold(
-        containerColor = BgColor,
-        bottomBar = {
-            NavigationBar(
-                containerColor = Brown,
-                contentColor   = Color.White,
-                tonalElevation = 0.dp
-            ) {
-                NavTab.entries.forEach { tab ->
-                    val selected = selectedTab == tab
-                    NavigationBarItem(
-                        selected  = selected,
-                        onClick   = { selectedTab = tab },
-                        icon      = {
-                            Icon(
-                                imageVector        = tab.icon,
-                                contentDescription = tab.label
-                            )
-                        },
-                        label     = {
-                            Text(tab.label, fontSize = 10.sp)
-                        },
-                        colors    = NavigationBarItemDefaults.colors(
-                            selectedIconColor        = Brown,
-                            selectedTextColor        = Color.White,
-                            unselectedIconColor      = BrownMuted,
-                            unselectedTextColor      = BrownMuted,
-                            indicatorColor           = BgColor
-                        )
-                    )
-                }
-            }
-        }
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
-            when (selectedTab) {
-                NavTab.CALENDAR -> DashboardScreen()
-                NavTab.INSIGHTS -> InsightsPlaceholder()
-                NavTab.PROFILE  -> ProfilePlaceholder()
-            }
-        }
-    }
-}
-
-// ── placeholder screens ───────────────────────────────────────────────────────
-@Composable
-fun InsightsPlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("insights coming soon", color = Brown, fontSize = 16.sp)
-    }
-}
-
-@Composable
-fun ProfilePlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("profile coming soon", color = Brown, fontSize = 16.sp)
     }
 }
