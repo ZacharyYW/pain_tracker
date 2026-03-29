@@ -1,5 +1,6 @@
 package com.example.pain_tracker.ui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.example.pain_tracker.ui.screens.DashboardScreen
 import com.example.pain_tracker.ui.screens.DevicePairingScreen
 import com.example.pain_tracker.ui.screens.LoginScreen
+import com.example.pain_tracker.ui.screens.FallingLeavesLoadingScreen // Ensure you create this file
 
 // ── colours matching DashboardScreen palette ──────────────────────────────────
 private val BgColor     = Color(0xFFFCF4EC)
@@ -35,6 +37,34 @@ private enum class NavTab(val label: String, val icon: ImageVector) {
 @Composable
 fun PainTrackerApp() {
     var isLoggedIn by remember { mutableStateOf(false) }
+    var isPaired by remember { mutableStateOf(false) }
+    var isLoadingComplete by remember { mutableStateOf(false) }
+
+    // Using Crossfade makes the transition between screens look much smoother
+    Crossfade(targetState = Triple(isLoggedIn, isPaired, isLoadingComplete), label = "app_flow") { (logged, paired, loaded) ->
+        when {
+            // 1. First, user must log in
+            !logged -> {
+                LoginScreen(onLoginSuccess = { isLoggedIn = true })
+            }
+
+            // 2. Second, user pairs their device
+            !paired -> {
+                DevicePairingScreen(onPaired = { isPaired = true })
+            }
+
+            // 3. Third, show the falling leaves for 3 seconds
+            !loaded -> {
+                FallingLeavesLoadingScreen(onTimeout = {
+                    isLoadingComplete = true
+                })
+            }
+
+            // 4. Finally, show the dashboard
+            else -> {
+                DashboardScreen()
+            }
+        }
     var isPaired   by remember { mutableStateOf(false) }
 
     when {
