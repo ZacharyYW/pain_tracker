@@ -11,6 +11,7 @@ import com.example.pain_tracker.model.PredictionPipeline
 import com.example.pain_tracker.model.SessionSource
 import com.example.pain_tracker.model.Symptom
 import com.example.pain_tracker.model.ZoneLevel
+import com.google.firebase.firestore.DocumentSnapshot
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -117,6 +118,14 @@ object FirestoreRepository {
             .orderBy("startTime", Direction.DESCENDING)
             .get().await()
         return snap.documents.mapNotNull { docToSession(it.data ?: return@mapNotNull null) }
+    }
+
+    suspend fun fetchAllSessions(): List<DocumentSnapshot> {
+        return sessionsCollection()
+            .orderBy("startTime", Direction.DESCENDING)
+            .get()
+            .await()
+            .documents
     }
 
     // ── Serialization ──────────────────────────────────────────────────────
