@@ -1,6 +1,8 @@
 package com.example.pain_tracker.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -17,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -37,7 +40,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
-import com.example.pain_tracker.R // Replace with your actual package
+import com.example.pain_tracker.R
 
 @Composable
 fun getStatusImage(score: Int?): Int {
@@ -54,6 +57,7 @@ fun getStatusImage(score: Int?): Int {
 
 // ── colour palette ────────────────────────────────────────────────────────────
 private val BgColor      = Color(0xFFFCF4EC) //cream 0xFFFCF4EC
+private val Brown       = Color(0xFF6B3820)  // alias used by FAB
 private val Surface1    = Color(0xFF7A9B6A)
 private val Surface2    = Color(0xFF725241)
 private val Border      = Color(0xFF6B3820)
@@ -73,24 +77,48 @@ private fun zoneColor(l: ZoneLevel) = when(l) { ZoneLevel.SEVERE -> PinkAccent; 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
+    val weekOffset        by vm.weekOffset.collectAsState()
+    val selectedYear      by vm.selectedYear.collectAsState()
+    val selectedMonth     by vm.selectedMonth.collectAsState()
+    val selectedDay       by vm.selectedDay.collectAsState()
+
     val monthScores       by vm.monthScores.collectAsState()
     val displayedSessions by vm.displayedSessions.collectAsState()
     val displayedScore    by vm.displayedScore.collectAsState()
     val showAddSheet      by vm.showAddSheet.collectAsState()
     val expandedId        by vm.expandedId.collectAsState()
-    val selectedDay       by vm.selectedDay.collectAsState()
-    val weekOffset        by vm.weekOffset.collectAsState()
 
     // Pager State for swipeable weeks (starts at 5000 to allow infinite swiping both ways)
     val pagerState = rememberPagerState(initialPage = 5000, pageCount = { 10000 })
     val coroutineScope = rememberCoroutineScope()
 
-    // Determine current month/year based on what week is currently being viewed
-    val currentCal = remember(weekOffset) {
-        val cal = Calendar.getInstance()
-        cal.add(Calendar.WEEK_OF_YEAR, weekOffset)
-        cal.set(Calendar.DAY_OF_WEEK, Calendar.WEDNESDAY) // Logic from V2
-        cal
+    // NEW SMART CALENDAR LOGIC:
+    // Prioritizes showing the month of the selected day if it falls in the current week!
+    val currentCal = remember(weekOffset, selectedYear, selectedMonth, selectedDay) {
+        val cal = Calendar.getInstance().apply {
+            firstDayOfWeek = Calendar.SUNDAY
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
+            add(Calendar.WEEK_OF_YEAR, weekOffset)
+        }
+
+        val weekStart = cal.clone() as Calendar
+        while (weekStart.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
+            weekStart.add(Calendar.DAY_OF_MONTH, -1)
+        }
+        val weekEnd = weekStart.clone() as Calendar
+        weekEnd.add(Calendar.DAY_OF_MONTH, 6)
+
+        val targetCal = Calendar.getInstance().apply {
+            set(selectedYear, selectedMonth, selectedDay)
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0)
+        }
+
+        if (targetCal.timeInMillis in weekStart.timeInMillis..weekEnd.timeInMillis) {
+            targetCal // Show the month of our selected day
+        } else {
+            weekStart.add(Calendar.DAY_OF_MONTH, 3) // Fallback to Wednesday rule
+            weekStart
+        }
     }
 
     val currentMonthYear = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(currentCal.time).lowercase()
@@ -112,7 +140,6 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     LaunchedEffect(weekOffset) {
         val targetPage = 5000 + weekOffset
         if (pagerState.currentPage != targetPage) {
-            // Jump logic from V2 to prevent animation freezing
             if (abs(pagerState.currentPage - targetPage) > 3) {
                 pagerState.scrollToPage(targetPage)
             } else {
@@ -129,15 +156,24 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
         }
     }
 
-    val today = Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
-    val dateLabel = if (selectedDay == today && weekOffset == 0) "today" else "${currentMonthYear.split(" ")[0].take(3)} $selectedDay"
+    val isToday = selectedYear == Calendar.getInstance().get(Calendar.YEAR) &&
+            selectedMonth == Calendar.getInstance().get(Calendar.MONTH) &&
+            selectedDay == Calendar.getInstance().get(Calendar.DAY_OF_MONTH)
+    val monthName = SimpleDateFormat("MMM", Locale.getDefault()).format(Calendar.getInstance().apply { set(Calendar.MONTH, selectedMonth) }.time).lowercase()
+    val dateLabel = if (isToday) "today" else "$monthName $selectedDay"
+
+    val showPeriodSheet by vm.showPeriodSheet.collectAsState()
+    val periodDays      by vm.periodDays.collectAsState()
+    var fabExpanded by remember { mutableStateOf(false) }
 
     Scaffold(containerColor = BgColor,
         floatingActionButton = {
-            FloatingActionButton(onClick = { vm.openAddSheet() },
-                containerColor = PinkAccent, contentColor = Color.White, shape = CircleShape) {
-                Icon(Icons.Default.Add, "Add session")
-            }
+            ExpandableFab(
+                expanded   = fabExpanded,
+                onToggle   = { fabExpanded = !fabExpanded },
+                onPain     = { fabExpanded = false; vm.openAddSheet() },
+                onPeriod   = { fabExpanded = false; vm.openPeriodSheet() }
+            )
         }
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 96.dp)) {
@@ -145,12 +181,15 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
             item {
                 MonthCalendarSection(
                     monthScores = monthScores,
+                    selectedYear = selectedYear,
+                    selectedMonth = selectedMonth,
                     selectedDay = selectedDay,
                     currentMonthYear = currentMonthYear,
                     currentCal = currentCal,
                     monthOptions = monthOptions,
+                    periodDays = periodDays,
                     onMonthSelect = { y, m -> vm.setMonth(y, m) },
-                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) } // V2 parameters
+                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) }
                 )
             }
             item { HorizontalDivider(color = Border, thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) }
@@ -158,11 +197,14 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
             item {
                 WeekStripSection(
                     scoresMap = monthScores,
+                    selectedYear = selectedYear,
+                    selectedMonth = selectedMonth,
                     selectedDay = selectedDay,
                     weekOffset = weekOffset,
                     pagerState = pagerState,
                     coroutineScope = coroutineScope,
-                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) }, // V2 parameters
+                    periodDays = periodDays,
+                    onDayClick = { y, m, d, score -> vm.selectDay(y, m, d, score) },
                     onTodayClick = { vm.resetToToday() }
                 )
             }
@@ -183,7 +225,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
                     session = session,
                     expanded = expandedId == session.id,
                     onToggle = { vm.toggleSession(session.id) },
-                    onEdit = { vm.openAddSheet(session) }, // V2 edit logic
+                    onEdit = { vm.openAddSheet(session) },
                     onToggleSx = { sx -> vm.toggleSymptom(session.id, sx) },
                     onNotes = { notes -> vm.updateNotes(session.id, notes) }
                 )
@@ -193,7 +235,8 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val editingSession by vm.editingSession.collectAsState() // V2 edit state
+    val periodSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val editingSession by vm.editingSession.collectAsState()
 
     if (showAddSheet) {
         ModalBottomSheet(
@@ -202,7 +245,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
             containerColor = BgColor
         ) {
             AddSessionSheet(
-                existingSession = editingSession, // V2 param
+                existingSession = editingSession,
                 onSave = { sh, sm, eh, em, peak, sx, notes ->
                     if (editingSession != null) {
                         vm.updateSession(editingSession!!.id, sh, sm, eh, em, peak, sx, notes)
@@ -210,9 +253,209 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
                         vm.addManualSession(sh, sm, eh, em, peak, sx, notes)
                     }
                 },
-                onDelete = { session -> vm.deleteSession(session.id) }, // V2 param
+                onDelete = { session -> vm.deleteSession(session.id) },
                 onDismiss = { vm.closeAddSheet() }
             )
+        }
+    }
+
+    if (showPeriodSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { vm.closePeriodSheet() },
+            sheetState = periodSheetState,
+            containerColor = BgColor
+        ) {
+            PeriodLogSheet(
+                onSave    = { y, m, d, flow, sx, notes -> vm.logPeriod(y, m, d, flow, sx, notes) },
+                onDismiss = { vm.closePeriodSheet() }
+            )
+        }
+    }
+}
+
+// ── expandable FAB ────────────────────────────────────────────────────────────
+@Composable
+fun ExpandableFab(
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onPain:   () -> Unit,
+    onPeriod: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter   = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+            exit    = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+        ) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ExtendedFloatingActionButton(
+                    onClick          = onPeriod,
+                    containerColor   = PinkAccent,
+                    contentColor     = Color.White,
+                    shape            = RoundedCornerShape(24.dp)
+                ) {
+                    Text("log period", fontSize = 14.sp)
+                }
+                ExtendedFloatingActionButton(
+                    onClick          = onPain,
+                    containerColor   = PinkAccent,
+                    contentColor     = Color.White,
+                    shape            = RoundedCornerShape(24.dp)
+                ) {
+                    Text("log pain session", fontSize = 14.sp)
+                }
+            }
+        }
+
+        FloatingActionButton(
+            onClick        = onToggle,
+            containerColor = PinkAccent,
+            contentColor   = Color.White,
+            shape          = CircleShape
+        ) {
+            val rotation by animateFloatAsState(
+                targetValue   = if (expanded) 45f else 0f,
+                animationSpec = tween(200),
+                label         = "fab_rotation"
+            )
+            Icon(
+                Icons.Default.Add,
+                contentDescription = if (expanded) "close" else "add",
+                modifier = Modifier.graphicsLayer { rotationZ = rotation }
+            )
+        }
+    }
+}
+
+// ── period log sheet ─────────────────────────────────────────────────────────
+@Composable
+fun PeriodLogSheet(
+    onSave:    (Int, Int, Int, Int, Set<String>, String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 40.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("log period", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+
+        val today = remember { Calendar.getInstance() }
+        var selectedYear   by remember { mutableIntStateOf(today.get(Calendar.YEAR)) }
+        var selectedMonth  by remember { mutableIntStateOf(today.get(Calendar.MONTH)) }
+        var selectedDay2   by remember { mutableIntStateOf(today.get(Calendar.DAY_OF_MONTH)) }
+        val monthNames = listOf("jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec")
+        val daysInMonth = remember(selectedYear, selectedMonth) {
+            Calendar.getInstance().apply {
+                set(Calendar.YEAR, selectedYear); set(Calendar.MONTH, selectedMonth)
+            }.getActualMaximum(Calendar.DAY_OF_MONTH)
+        }
+        if (selectedDay2 > daysInMonth) selectedDay2 = daysInMonth
+
+        Text("date", color = TextPrimary, fontSize = 13.sp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFFEDD9CC))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(2f)) {
+                Text("▲", color = TextPrimary, fontSize = 10.sp,
+                    modifier = Modifier.clickable { selectedMonth = (selectedMonth + 1) % 12 })
+                Text(monthNames[selectedMonth], color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("▼", color = TextPrimary, fontSize = 10.sp,
+                    modifier = Modifier.clickable { selectedMonth = (selectedMonth + 11) % 12 })
+            }
+            Text("/", color = TextPrimary, fontSize = 18.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1.5f)) {
+                Text("▲", color = TextPrimary, fontSize = 10.sp,
+                    modifier = Modifier.clickable { selectedDay2 = selectedDay2 % daysInMonth + 1 })
+                Text("%02d".format(selectedDay2), color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("▼", color = TextPrimary, fontSize = 10.sp,
+                    modifier = Modifier.clickable { selectedDay2 = (selectedDay2 - 2 + daysInMonth) % daysInMonth + 1 })
+            }
+            Text("/", color = TextPrimary, fontSize = 18.sp)
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(2f)) {
+                Text("▲", color = TextPrimary, fontSize = 10.sp,
+                    modifier = Modifier.clickable { selectedYear++ })
+                Text("$selectedYear", color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                Text("▼", color = TextPrimary, fontSize = 10.sp,
+                    modifier = Modifier.clickable { selectedYear-- })
+            }
+        }
+
+        Text("flow", color = TextPrimary, fontSize = 13.sp)
+        var flow by remember { mutableIntStateOf(1) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("spotting", "light", "medium", "heavy").forEachIndexed { i, label ->
+                val sel = flow == i
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(if (sel) PinkAccent else Color(0xFFEDD9CC))
+                        .clickable { flow = i }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Text(label, color = if (sel) Color.White else TextPrimary, fontSize = 12.sp)
+                }
+            }
+        }
+
+        Text("symptoms", color = TextPrimary, fontSize = 13.sp)
+        var periodSymptoms by remember { mutableStateOf(setOf<String>()) }
+        val options = listOf("cramping", "bloating", "headache", "fatigue", "mood changes", "back pain")
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            options.chunked(3).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { opt ->
+                        val sel = opt in periodSymptoms
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(20.dp))
+                                .background(if (sel) PinkAccent else Color(0xFFEDD9CC))
+                                .clickable { periodSymptoms = if (sel) periodSymptoms - opt else periodSymptoms + opt }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(opt, color = if (sel) Color.White else TextPrimary, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Text("notes", color = TextPrimary, fontSize = 13.sp)
+        var notes by remember { mutableStateOf("") }
+        OutlinedTextField(
+            value         = notes,
+            onValueChange = { notes = it },
+            placeholder   = { Text("optional notes...", fontSize = 12.sp) },
+            modifier      = Modifier.fillMaxWidth(),
+            minLines      = 2,
+            maxLines      = 4,
+            colors        = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor      = PinkAccent,
+                unfocusedBorderColor    = Border,
+                focusedTextColor        = TextPrimary,
+                unfocusedTextColor      = TextPrimary,
+                cursorColor             = PinkAccent,
+                focusedContainerColor   = BgColor,
+                unfocusedContainerColor = BgColor
+            )
+        )
+
+        Button(
+            onClick   = { onSave(selectedYear, selectedMonth, selectedDay2, flow, periodSymptoms, notes) },
+            modifier  = Modifier.fillMaxWidth().height(50.dp),
+            shape     = RoundedCornerShape(12.dp),
+            colors    = ButtonDefaults.buttonColors(containerColor = PinkAccent, contentColor = Color.White)
+        ) {
+            Text("save", fontSize = 14.sp, fontWeight = FontWeight.Medium)
         }
     }
 }
@@ -221,10 +464,13 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
 @Composable
 fun MonthCalendarSection(
     monthScores: Map<Int, DayScore>,
+    selectedYear: Int,
+    selectedMonth: Int,
     selectedDay: Int,
     currentMonthYear: String,
     currentCal: Calendar,
     monthOptions: List<Pair<String, Pair<Int, Int>>>,
+    periodDays: Set<String>,
     onMonthSelect: (Int, Int) -> Unit,
     onDayClick: (Int, Int, Int, DayScore?) -> Unit
 ) {
@@ -235,7 +481,7 @@ fun MonthCalendarSection(
         Row(modifier = Modifier.fillMaxWidth().padding(start = 12.dp, end = 20.dp, top = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
 
-            Box {
+            Box(modifier = Modifier.wrapContentSize(Alignment.TopStart)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
@@ -253,14 +499,14 @@ fun MonthCalendarSection(
                     onDismissRequest = { expandedMonthMenu = false },
                     modifier = Modifier
                         .background(Surface1)
-                        .heightIn(max = 240.dp) // V2 logic: limit height
+                        .heightIn(max = 240.dp)
                 ) {
                     monthOptions.forEach { option ->
                         DropdownMenuItem(
-                            text = { Text(option.first, color = TextPrimary) },
+                            text = { Text(option.first, color = TextOnSurface) },
                             onClick = {
-                                onMonthSelect(option.second.first, option.second.second)
                                 expandedMonthMenu = false
+                                onDayClick(option.second.first, option.second.second, 1, null)
                             }
                         )
                     }
@@ -276,13 +522,11 @@ fun MonthCalendarSection(
         AnimatedVisibility(visible = expanded, enter = expandVertically(), exit = shrinkVertically()) {
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp)) {
                 Row(modifier = Modifier.fillMaxWidth()) {
-                    // V2 lowercase
                     listOf("s","m","t","w","t","f","s").forEach { d ->
                         Text(d, color = TextPrimary, fontSize = 10.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f).padding(vertical = 4.dp))
                     }
                 }
 
-                // V2 variables needed for onDayClick
                 val currentYear = currentCal.get(Calendar.YEAR)
                 val currentMonth = currentCal.get(Calendar.MONTH)
 
@@ -302,13 +546,15 @@ fun MonthCalendarSection(
                             } else {
                                 val day = dayCounter++
                                 val ds = monthScores[day]
-                                val isSelected = day == selectedDay
+                                // FULL DATE CHECK
+                                val isSelected = currentYear == selectedYear && currentMonth == selectedMonth && day == selectedDay
 
-                                // V1 LAYOUT (Images with text safely underneath) + V2 CLICK LOGIC
                                 Column(
                                     modifier = Modifier.weight(1f).padding(vertical = 4.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
+                                    val periodKey = "%04d-%02d-%02d".format(currentYear, currentMonth + 1, day)
+                                    val isPeriod = periodKey in periodDays
                                     Box(
                                         contentAlignment = Alignment.Center,
                                         modifier = Modifier
@@ -316,9 +562,18 @@ fun MonthCalendarSection(
                                             .aspectRatio(1f)
                                             .padding(1.dp)
                                             .clip(CircleShape)
-                                            .background(Surface2.copy(alpha = 0.04f))
-                                            .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                                            // V2 Click Logic:
+                                            .background(
+                                                if (isPeriod) PinkAccent.copy(alpha = 0.15f)
+                                                else Surface2.copy(alpha = 0.04f)
+                                            )
+                                            .then(
+                                                if (isPeriod) Modifier.border(3.dp, PinkAccent, CircleShape)
+                                                else Modifier
+                                            )
+                                            .then(
+                                                if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape)
+                                                else Modifier
+                                            )
                                             .clickable { onDayClick(currentYear, currentMonth, day, ds) }
                                     ) {
                                         Image(
@@ -326,6 +581,16 @@ fun MonthCalendarSection(
                                             contentDescription = "Pain status",
                                             modifier = Modifier.size(30.dp),
                                         )
+                                        if (isPeriod) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomCenter)
+                                                    .padding(bottom = 2.dp)
+                                                    .size(4.dp)
+                                                    .clip(CircleShape)
+                                                    .background(PinkAccent)
+                                            )
+                                        }
                                     }
 
                                     Spacer(Modifier.height(4.dp))
@@ -350,14 +615,16 @@ fun MonthCalendarSection(
 @Composable
 fun WeekStripSection(
     scoresMap: Map<Int, DayScore>,
+    selectedYear: Int,
+    selectedMonth: Int,
     selectedDay: Int,
     weekOffset: Int,
     pagerState: PagerState,
     coroutineScope: CoroutineScope,
+    periodDays: Set<String>,
     onDayClick: (Int, Int, Int, DayScore?) -> Unit,
     onTodayClick: () -> Unit
 ) {
-    // V2 labels
     val labels = listOf("sun","mon","tue","wed","thu","fri","sat")
 
     val weekLabel = when (weekOffset) {
@@ -403,7 +670,6 @@ fun WeekStripSection(
             val loopCal = Calendar.getInstance()
             loopCal.add(Calendar.WEEK_OF_YEAR, pageWeekOffset)
 
-            // V2 loop logic (starts Sunday)
             while (loopCal.get(Calendar.DAY_OF_WEEK) != Calendar.SUNDAY) {
                 loopCal.add(Calendar.DAY_OF_MONTH, -1)
             }
@@ -413,14 +679,16 @@ fun WeekStripSection(
                     val itemYear = loopCal.get(Calendar.YEAR)
                     val itemMonth = loopCal.get(Calendar.MONTH)
                     val itemDay = loopCal.get(Calendar.DAY_OF_MONTH)
-                    val isSelected = itemDay == selectedDay
+                    // FULL DATE CHECK
+                    val isSelected = itemYear == selectedYear && itemMonth == selectedMonth && itemDay == selectedDay
                     val ds = scoresMap[itemDay]
 
-                    // V1 UI layout + V2 parameters
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.weight(1f).padding(vertical = 4.dp)
                     ) {
+                        val periodKey = "%04d-%02d-%02d".format(itemYear, itemMonth + 1, itemDay)
+                        val isPeriod = periodKey in periodDays
                         Text(labels[i], color = if (isSelected) PinkAccent else TextPrimary, fontSize = 10.sp)
                         Spacer(Modifier.height(4.dp))
 
@@ -430,9 +698,18 @@ fun WeekStripSection(
                                 .aspectRatio(1f)
                                 .padding(1.dp)
                                 .clip(CircleShape)
-                                .background(Surface2.copy(alpha = 0.04f))
-                                .then(if (isSelected) Modifier.border(1.5.dp, PinkAccent, CircleShape) else Modifier)
-                                // V2 Click Logic:
+                                .background(
+                                    if (isPeriod) PinkAccent.copy(alpha = 0.15f)
+                                    else Surface2.copy(alpha = 0.04f)
+                                )
+                                .then(
+                                    if (isPeriod) Modifier.border(3.dp, PinkAccent, CircleShape)
+                                    else Modifier
+                                )
+                                .then(
+                                    if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape)
+                                    else Modifier
+                                )
                                 .clickable { onDayClick(itemYear, itemMonth, itemDay, ds) }
                         ) {
                             Image(
@@ -440,6 +717,16 @@ fun WeekStripSection(
                                 contentDescription = null,
                                 modifier = Modifier.size(30.dp),
                             )
+                            if (isPeriod) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 2.dp)
+                                        .size(4.dp)
+                                        .clip(CircleShape)
+                                        .background(PinkAccent)
+                                )
+                            }
                         }
                         Spacer(Modifier.height(4.dp))
                         Text("$itemDay", color = if (isSelected) PinkAccent else TextPrimary, fontSize = 10.sp)
@@ -457,7 +744,7 @@ fun SessionCard(
     session: PainSession,
     expanded: Boolean,
     onToggle: () -> Unit,
-    onEdit: () -> Unit, // V2 Logic
+    onEdit: () -> Unit,
     onToggleSx: (Symptom) -> Unit,
     onNotes: (String) -> Unit
 ) {
@@ -510,7 +797,7 @@ fun SessionCard(
             Column(modifier = Modifier.padding(top = 12.dp)) {
                 HorizontalDivider(color = Border, thickness = 0.5.dp)
                 Spacer(Modifier.height(12.dp))
-                Text("symptoms", color = TextOnSurface, fontSize = 11.sp) // V2 TextOnSurface
+                Text("symptoms", color = TextOnSurface, fontSize = 11.sp)
                 Spacer(Modifier.height(8.dp))
                 SymptomChips(
                     symptoms = Symptom.entries.toList(),
@@ -528,7 +815,6 @@ fun SessionCard(
                         focusedContainerColor = BgColor, unfocusedContainerColor = BgColor),
                     textStyle = LocalTextStyle.current.copy(fontSize = 12.sp, color = TextPrimary))
 
-                // V2 Dedicated Edit Button
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = { onEdit() }) {
                         Text("edit", color = TextOnSurface, fontSize = 12.sp)
@@ -570,7 +856,6 @@ fun AddSessionSheet(
     onDelete: (PainSession) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // V2 Logic applied fully here
     fun getTimePart(ts: Long, field: Int): Int = Calendar.getInstance().apply { timeInMillis = ts }.get(field)
 
     var startHour by remember { mutableIntStateOf(existingSession?.let { getTimePart(it.startTime, Calendar.HOUR_OF_DAY) } ?: 14) }
@@ -678,7 +963,7 @@ fun AddSessionSheet(
     }
 }
 
-// ── symptom chips (wrapping rows, no FlowRow dependency) ─────────────────────
+// ── symptom chips ────────────────────────────────────────────────────────────
 @Composable
 fun SymptomChips(symptoms: List<Symptom>, isActive: (Symptom) -> Boolean, onToggle: (Symptom) -> Unit) {
     val chunkSize = 3
