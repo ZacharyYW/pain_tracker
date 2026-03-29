@@ -304,9 +304,6 @@ fun MonthCalendarSection(
                                 val ds = monthScores[day]
                                 val isSelected = day == selectedDay
 
-                                // PERIOD LOGIC: Check if this day has a period logged
-                                // Assuming your DayScore model has a 'hasPeriod: Boolean' field
-                                val hasPeriod = ds?.hasPeriod ?: false
 
                                 // V1 LAYOUT (Images with text safely underneath) + V2 CLICK LOGIC
                                 Column(
