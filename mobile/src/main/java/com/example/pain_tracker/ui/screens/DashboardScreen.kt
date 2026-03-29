@@ -317,8 +317,13 @@ fun MonthCalendarSection(
                                             .aspectRatio(1f)
                                             .padding(1.dp)
                                             .clip(CircleShape)
+                                            //.background(if (isPeriod) PinkAccent.copy(alpha = 0.2f) else Surface2.copy(alpha = 0.04f))
                                             .background(Surface2.copy(alpha = 0.04f))
-                                            .then(if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape) else Modifier)
+                                            .then(
+                                                //if (isPeriod) Modifier.border(3.dp, PinkAccent, CircleShape)
+                                                //else
+                                                if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape)
+                                                else Modifier)
                                             // V2 Click Logic:
                                             .clickable { onDayClick(currentYear, currentMonth, day, ds) }
                                     ) {
@@ -431,8 +436,13 @@ fun WeekStripSection(
                                 .aspectRatio(1f)
                                 .padding(1.dp)
                                 .clip(CircleShape)
+                                //.background(if (isPeriod) PinkAccent.copy(alpha = 0.2f) else Surface2.copy(alpha = 0.04f))
                                 .background(Surface2.copy(alpha = 0.04f))
-                                .then(if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape) else Modifier)
+                                .then(
+                                    //if (isPeriod) Modifier.border(3.dp, PinkAccent, CircleShape)
+                                    //else
+                                    if (isSelected) Modifier.border(1.5.dp, Surface1, CircleShape)
+                                    else Modifier)
                                 // V2 Click Logic:
                                 .clickable { onDayClick(itemYear, itemMonth, itemDay, ds) }
                         ) {
