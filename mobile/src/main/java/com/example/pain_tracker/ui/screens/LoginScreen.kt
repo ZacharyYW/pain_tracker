@@ -197,7 +197,10 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
                             auth.signInWithEmailAndPassword(email.trim(), password)
                                 .addOnCompleteListener { task ->
                                     isLoading = false
-                                    if (task.isSuccessful) onLoginSuccess()
+                                    if (task.isSuccessful) {
+                                        FirestoreRepository.downloadPersonalizedModel(context)
+                                        onLoginSuccess()
+                                    }
                                     else errorMessage = task.exception?.localizedMessage ?: "login failed"
                                 }
                         }

@@ -1,28 +1,30 @@
 package com.example.pain_tracker.repository
 
+import android.content.Context
 import com.example.pain_tracker.model.CorrectionRecord
 import com.google.firebase.Firebase
 import com.google.firebase.auth.auth
 import com.google.firebase.firestore.Query.Direction
 import com.google.firebase.firestore.firestore
+import com.google.firebase.storage.FirebaseStorage
 import com.example.pain_tracker.model.PainSession
 import com.example.pain_tracker.model.PainZone
 import com.example.pain_tracker.model.PredictionPipeline
 import com.example.pain_tracker.model.SessionSource
 import com.example.pain_tracker.model.Symptom
 import com.example.pain_tracker.model.ZoneLevel
-import com.google.firebase.firestore.DocumentSnapshot
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.io.File
 
 object FirestoreRepository {
 
     private val db   get() = Firebase.firestore
     private val auth get() = Firebase.auth
 
-    private val userId: String
+    val userId: String // Expose getter
         get() = auth.currentUser?.uid
             ?: error("No authenticated user. Call signInAnonymously() first.")
 
@@ -34,6 +36,29 @@ object FirestoreRepository {
     suspend fun signInAnonymously() {
         if (auth.currentUser == null) {
             auth.signInAnonymously().await()
+        }
+    }
+
+    // ── Download ML Model ──────────────────────────────────────────────────
+
+    // --- NEW: Model downloader ---
+    fun downloadPersonalizedModel(context: Context) {
+        try {
+            val uid = userId
+            val storageRef = FirebaseStorage.getInstance().reference
+            val modelRef = storageRef.child("models/$uid/personalized_model.json")
+
+            val localFile = File(context.filesDir, "personalized_model.json")
+
+            modelRef.getFile(localFile)
+                .addOnSuccessListener {
+                    println("SUCCESS: Personalized model downloaded!")
+                }
+                .addOnFailureListener {
+                    println("No personalized model found, using base model.")
+                }
+        } catch (e: Exception) {
+            println("Failed to initiate model download: ${e.message}")
         }
     }
 
@@ -62,7 +87,6 @@ object FirestoreRepository {
         sessionsCollection().document(id.toString()).delete().await()
     }
 
-    /** Updates specific fields on an existing session document. */
     suspend fun updateSessionFields(session: PainSession) {
         sessionsCollection().document(session.id.toString())
             .update(
@@ -77,11 +101,6 @@ object FirestoreRepository {
             ).await()
     }
 
-    /**
-     * Saves a correction record under a separate top-level collection.
-     * Keyed by sessionId so duplicate corrections overwrite rather than accumulate.
-     * The retraining script reads from users/{uid}/corrections/.
-     */
     suspend fun saveCorrection(correction: CorrectionRecord) {
         db.collection("users").document(userId)
             .collection("corrections")
@@ -120,14 +139,6 @@ object FirestoreRepository {
         return snap.documents.mapNotNull { docToSession(it.data ?: return@mapNotNull null) }
     }
 
-    suspend fun fetchAllSessions(): List<DocumentSnapshot> {
-        return sessionsCollection()
-            .orderBy("startTime", Direction.DESCENDING)
-            .get()
-            .await()
-            .documents
-    }
-
     // ── Serialization ──────────────────────────────────────────────────────
 
     private fun sessionToMap(session: PainSession): Map<String, Any?> = mapOf(
@@ -149,6 +160,7 @@ object FirestoreRepository {
                 "timestamp"   to w.timestamp,
                 "predicted"   to w.predicted,
                 "actual"      to w.actual,
+                "features"    to w.features // --- NEW: Upload features array ---
             )
         },
     )
