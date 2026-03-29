@@ -19,8 +19,10 @@ import androidx.compose.ui.unit.sp
 import com.example.pain_tracker.ui.screens.DashboardScreen
 import com.example.pain_tracker.ui.screens.DevicePairingScreen
 import com.example.pain_tracker.ui.screens.LoginScreen
-import com.example.pain_tracker.ui.screens.FallingLeavesLoadingScreen // Ensure you create this file
+import com.example.pain_tracker.ui.screens.FallingLeavesLoadingScreen
+import com.example.pain_tracker.ui.screens.InsightsScreen
 import com.example.pain_tracker.ui.screens.ProfileScreen
+
 
 // ── colours matching DashboardScreen palette ──────────────────────────────────
 private val BgColor     = Color(0xFFFCF4EC)
@@ -36,20 +38,6 @@ private enum class NavTab(val label: String, val icon: ImageVector) {
 }
 
 
-// ── placeholder screens ───────────────────────────────────────────────────────
-@Composable
-fun InsightsPlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("insights coming soon", color = Brown, fontSize = 16.sp)
-    }
-}
-
-@Composable
-fun ProfilePlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("profile coming soon", color = Brown, fontSize = 16.sp)
-    }
-}
 
 @Composable
 fun MainShell(onSignOutRequested: () -> Unit) {
@@ -92,7 +80,7 @@ fun MainShell(onSignOutRequested: () -> Unit) {
         Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             when (selectedTab) {
                 NavTab.CALENDAR -> DashboardScreen()
-                NavTab.INSIGHTS -> InsightsPlaceholder()
+                NavTab.INSIGHTS -> InsightsScreen()
                 NavTab.PROFILE -> ProfileScreen(onSignOut = onSignOutRequested)
             }
         }

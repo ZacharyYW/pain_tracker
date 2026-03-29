@@ -26,13 +26,14 @@ weather through before the next bloom.
 - **the bloom scale:** We replaced standard, clinical "pain faces" with our custom botanical bloom icons. A severe pain day is visualized as a crying lotus flower. A low pain day is a smiling succulent.
 - **mindful logging:** Easily log or edit manual pain sessions and menstrual cycles. Track start and end times, peak pain levels (1-10), specific symptoms (cramping, fatigue, nausea), private journal notes, and menstrual flow.
 - **perennial insights:** Your data is synthesized into a holistic "day score." Track your body's unique rhythms through a swipeable weekly strip and an interactive monthly calendar to find patterns in your seasons.
+- **personal adjustments:** Our research-backed machine learning algorithm built to quantify your pain gradually personalizes itself to you through clever additions of decision trees to our model. 
 - **calming ui/ux:** Designed with a deeply organic, earthy color palette (sage greens, warm browns, and creams) and minimalist typewriter typography to reduce sensory overload and anxiety.
 - **secure & private:** Built with Firebase Authentication (supporting Email, Google, and Anonymous sign-ins) to ensure your deeply personal health data remains entirely yours.
 
 ## 🌹 tech stack
 - **frontend:** Kotlin / Android Studio
 - **wearables:** Kotlin -- WearOS & Samsung Health SDK
-- **machine learning:** NumPy, Pandas, matplotlib, PyTorch, Jupyter, Scikit-learn, 
+- **machine learning:** XGBoost,  NumPy, Pandas, matplotlib, PyTorch, Jupyter, Scikit-learn, Firebase Functions
 - **backend & auth:** Firebase -- Authentication & Storage
 
 ## 🌸 our data
@@ -42,7 +43,6 @@ We established a custom pain baseline for each user, ranging from 0 (no pain) to
 ## 🌵 inspired by
 
 - Chu, Yaqi, Xingang Zhao, Jianda Han, and Yang Su. 2017. “Physiological Signal-Based Method for Measurement of Pain Intensity.” Frontiers in Neuroscience 11 (May). https://doi.org/10.3389/fnins.2017.00279.
-- EmmaTellblom. 2025. “GitHub - EmmaTellblom/Mensinator: Privacy Focused Period Tracking!” GitHub. March 29, 2025. https://github.com/EmmaTellblom/Mensinator.
 - Pouromran, Fatemeh, Srinivasan Radhakrishnan, and Sagar Kamarthi. 2021. “Exploration of Physiological Sensors, Features, and Machine Learning Models for Pain Intensity Estimation.” Edited by Khanh N.Q. Le. PLOS ONE 16 (7): e0254108. https://doi.org/10.1371/journal.pone.0254108.
 
 ## 🌻 license

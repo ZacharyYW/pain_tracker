@@ -42,15 +42,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.res.painterResource
 import com.example.pain_tracker.R
 
+// Updated to accurately check the session size before showing a happy face
 @Composable
-fun getStatusImage(score: Int?): Int {
+fun getStatusImage(ds: DayScore?): Int {
     return when {
-        score == null -> R.drawable.status_empty
-        score >= 85 -> R.drawable.status_happiest
-        score >= 70 -> R.drawable.status_smile
-        score >= 55 -> R.drawable.status_meh
-        score >= 40 -> R.drawable.status_sad
-        score >= 25 -> R.drawable.status_tears
+        ds == null || ds.sessions.isEmpty() -> R.drawable.status_empty
+        ds.score >= 85 -> R.drawable.status_happiest
+        ds.score >= 70 -> R.drawable.status_smile
+        ds.score >= 55 -> R.drawable.status_meh
+        ds.score >= 40 -> R.drawable.status_sad
+        ds.score >= 25 -> R.drawable.status_tears
         else -> R.drawable.status_saddest
     }
 }
@@ -82,18 +83,15 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
     val selectedMonth     by vm.selectedMonth.collectAsState()
     val selectedDay       by vm.selectedDay.collectAsState()
 
-    val monthScores       by vm.monthScores.collectAsState()
+    val scoresMap         by vm.scoresMap.collectAsState() // Using the new global scores map
     val displayedSessions by vm.displayedSessions.collectAsState()
     val displayedScore    by vm.displayedScore.collectAsState()
     val showAddSheet      by vm.showAddSheet.collectAsState()
     val expandedId        by vm.expandedId.collectAsState()
 
-    // Pager State for swipeable weeks (starts at 5000 to allow infinite swiping both ways)
     val pagerState = rememberPagerState(initialPage = 5000, pageCount = { 10000 })
     val coroutineScope = rememberCoroutineScope()
 
-    // NEW SMART CALENDAR LOGIC:
-    // Prioritizes showing the month of the selected day if it falls in the current week!
     val currentCal = remember(weekOffset, selectedYear, selectedMonth, selectedDay) {
         val cal = Calendar.getInstance().apply {
             firstDayOfWeek = Calendar.SUNDAY
@@ -114,16 +112,15 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
         }
 
         if (targetCal.timeInMillis in weekStart.timeInMillis..weekEnd.timeInMillis) {
-            targetCal // Show the month of our selected day
+            targetCal
         } else {
-            weekStart.add(Calendar.DAY_OF_MONTH, 3) // Fallback to Wednesday rule
+            weekStart.add(Calendar.DAY_OF_MONTH, 3)
             weekStart
         }
     }
 
     val currentMonthYear = SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(currentCal.time).lowercase()
 
-    // Generate dropdown options
     val monthOptions = remember {
         val cal = Calendar.getInstance()
         cal.add(Calendar.MONTH, -12)
@@ -136,7 +133,6 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
         }
     }
 
-    // Sync ViewModel -> Pager (When clicking Today or picking a Month)
     LaunchedEffect(weekOffset) {
         val targetPage = 5000 + weekOffset
         if (pagerState.currentPage != targetPage) {
@@ -148,7 +144,6 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
         }
     }
 
-    // Sync Pager -> ViewModel (When swiping left/right)
     LaunchedEffect(pagerState.settledPage) {
         val targetOffset = pagerState.settledPage - 5000
         if (weekOffset != targetOffset) {
@@ -180,7 +175,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
 
             item {
                 MonthCalendarSection(
-                    monthScores = monthScores,
+                    scoresMap = scoresMap,
                     selectedYear = selectedYear,
                     selectedMonth = selectedMonth,
                     selectedDay = selectedDay,
@@ -196,7 +191,7 @@ fun DashboardScreen(vm: DashboardViewModel = viewModel()) {
 
             item {
                 WeekStripSection(
-                    scoresMap = monthScores,
+                    scoresMap = scoresMap,
                     selectedYear = selectedYear,
                     selectedMonth = selectedMonth,
                     selectedDay = selectedDay,
@@ -463,7 +458,7 @@ fun PeriodLogSheet(
 // ── monthly calendar ──────────────────────────────────────────────────────────
 @Composable
 fun MonthCalendarSection(
-    monthScores: Map<Int, DayScore>,
+    scoresMap: Map<String, DayScore>,
     selectedYear: Int,
     selectedMonth: Int,
     selectedDay: Int,
@@ -545,8 +540,9 @@ fun MonthCalendarSection(
                                 Spacer(modifier = Modifier.weight(1f))
                             } else {
                                 val day = dayCounter++
-                                val ds = monthScores[day]
-                                // FULL DATE CHECK
+                                val dateKey = "${currentYear}-${currentMonth}-${day}"
+                                val ds = scoresMap[dateKey]
+
                                 val isSelected = currentYear == selectedYear && currentMonth == selectedMonth && day == selectedDay
 
                                 Column(
@@ -577,7 +573,7 @@ fun MonthCalendarSection(
                                             .clickable { onDayClick(currentYear, currentMonth, day, ds) }
                                     ) {
                                         Image(
-                                            painter = painterResource(id = getStatusImage(ds?.score)),
+                                            painter = painterResource(id = getStatusImage(ds)),
                                             contentDescription = "Pain status",
                                             modifier = Modifier.size(30.dp),
                                         )
@@ -614,7 +610,7 @@ fun MonthCalendarSection(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun WeekStripSection(
-    scoresMap: Map<Int, DayScore>,
+    scoresMap: Map<String, DayScore>,
     selectedYear: Int,
     selectedMonth: Int,
     selectedDay: Int,
@@ -679,9 +675,11 @@ fun WeekStripSection(
                     val itemYear = loopCal.get(Calendar.YEAR)
                     val itemMonth = loopCal.get(Calendar.MONTH)
                     val itemDay = loopCal.get(Calendar.DAY_OF_MONTH)
-                    // FULL DATE CHECK
+
                     val isSelected = itemYear == selectedYear && itemMonth == selectedMonth && itemDay == selectedDay
-                    val ds = scoresMap[itemDay]
+
+                    val dateKey = "${itemYear}-${itemMonth}-${itemDay}"
+                    val ds = scoresMap[dateKey]
 
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -713,7 +711,7 @@ fun WeekStripSection(
                                 .clickable { onDayClick(itemYear, itemMonth, itemDay, ds) }
                         ) {
                             Image(
-                                painter = painterResource(id = getStatusImage(ds?.score)),
+                                painter = painterResource(id = getStatusImage(ds)),
                                 contentDescription = null,
                                 modifier = Modifier.size(30.dp),
                             )
