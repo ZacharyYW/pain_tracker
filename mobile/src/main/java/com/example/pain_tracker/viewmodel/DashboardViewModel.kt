@@ -23,7 +23,6 @@ class DashboardViewModel : ViewModel() {
 
     private var allCachedSessions: List<PainSession> = emptyList()
 
-    // NEW: Keyed by "YYYY-MM-DD" so months never overlap in the week view
     private val _scoresMap = MutableStateFlow<Map<String, DayScore>>(emptyMap())
     val scoresMap: StateFlow<Map<String, DayScore>> = _scoresMap.asStateFlow()
 
@@ -127,9 +126,26 @@ class DashboardViewModel : ViewModel() {
     }
 
     fun addManualSession(sh: Int, sm: Int, eh: Int, em: Int, peak: Float, sx: Set<Symptom>, notes: String) {
-        val cal = Calendar.getInstance().apply { set(Calendar.HOUR_OF_DAY, sh); set(Calendar.MINUTE, sm); set(Calendar.SECOND, 0) }
+        // Set the calendar strictly to the selected date on the dashboard, not "today"
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, _selectedYear.value)
+            set(Calendar.MONTH, _selectedMonth.value)
+            set(Calendar.DAY_OF_MONTH, _selectedDay.value)
+            set(Calendar.HOUR_OF_DAY, sh)
+            set(Calendar.MINUTE, sm)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
         val start = cal.timeInMillis
-        cal.set(Calendar.HOUR_OF_DAY, eh); cal.set(Calendar.MINUTE, em)
+
+        cal.set(Calendar.HOUR_OF_DAY, eh)
+        cal.set(Calendar.MINUTE, em)
+
+        // Midnight crossover check: If end time is before start time, it shifted into the next day
+        if (eh < sh || (eh == sh && em < sm)) {
+            cal.add(Calendar.DAY_OF_MONTH, 1)
+        }
+
         val end = cal.timeInMillis
         val totalMins = ((end - start) / 60_000).toInt().coerceAtLeast(1)
 
@@ -149,9 +165,24 @@ class DashboardViewModel : ViewModel() {
         val original = allCachedSessions.find { it.id == id } ?: return
 
         val cal = Calendar.getInstance().apply { timeInMillis = original.startTime }
-        cal.set(Calendar.HOUR_OF_DAY, sh); cal.set(Calendar.MINUTE, sm)
+        cal.set(Calendar.HOUR_OF_DAY, sh)
+        cal.set(Calendar.MINUTE, sm)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
         val start = cal.timeInMillis
-        cal.set(Calendar.HOUR_OF_DAY, eh); cal.set(Calendar.MINUTE, em)
+
+        // Reset cal back to original start date before calculating end time
+        cal.timeInMillis = original.startTime
+        cal.set(Calendar.HOUR_OF_DAY, eh)
+        cal.set(Calendar.MINUTE, em)
+        cal.set(Calendar.SECOND, 0)
+        cal.set(Calendar.MILLISECOND, 0)
+
+        // Midnight crossover check
+        if (eh < sh || (eh == sh && em < sm)) {
+            cal.add(Calendar.DAY_OF_MONTH, 1)
+        }
+
         val end = cal.timeInMillis
         val totalMins = ((end - start) / 60_000).toInt().coerceAtLeast(1)
 
@@ -308,15 +339,6 @@ class DashboardViewModel : ViewModel() {
 
         viewModelScope.launch {
             FirestoreRepository.saveWatchSession(newSession, result)
-        }
-
-        // ADDED: Save the watch session to Firestore
-        viewModelScope.launch {
-            runCatching {
-                FirestoreRepository.saveWatchSession(newSession, result)
-            }.onFailure { e ->
-                Log.e("DashboardViewModel", "Failed to save watch session to Firestore: ${e.message}")
-            }
         }
     }
 

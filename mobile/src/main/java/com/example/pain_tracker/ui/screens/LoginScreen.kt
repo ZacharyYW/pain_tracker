@@ -42,11 +42,9 @@ private val TextMuted   = Color(0xFF887D7D)
 
 @Composable
 fun LoginScreen(onLoginSuccess: () -> Unit) {
-    // State for the zoom level
-    val scale = remember { Animatable(1.2f) } // Start 20% larger
+    val scale = remember { Animatable(1.2f) }
 
     LaunchedEffect(Unit) {
-        // Zoom into the final size (1.0f) over 1.5 seconds
         scale.animateTo(
             targetValue = 1f,
             animationSpec = tween(durationMillis = 1500, easing = EaseOutQuart)
@@ -59,7 +57,6 @@ fun LoginScreen(onLoginSuccess: () -> Unit) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var isRegistering by remember { mutableStateOf(false) }
-
 
     val auth = remember { FirebaseAuth.getInstance() }
 

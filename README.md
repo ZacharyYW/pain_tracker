@@ -42,7 +42,6 @@ We established a custom pain baseline for each user, ranging from 0 (no pain) to
 ## 🌵 inspired by
 
 - Chu, Yaqi, Xingang Zhao, Jianda Han, and Yang Su. 2017. “Physiological Signal-Based Method for Measurement of Pain Intensity.” Frontiers in Neuroscience 11 (May). https://doi.org/10.3389/fnins.2017.00279.
-- EmmaTellblom. 2025. “GitHub - EmmaTellblom/Mensinator: Privacy Focused Period Tracking!” GitHub. March 29, 2025. https://github.com/EmmaTellblom/Mensinator.
 - Pouromran, Fatemeh, Srinivasan Radhakrishnan, and Sagar Kamarthi. 2021. “Exploration of Physiological Sensors, Features, and Machine Learning Models for Pain Intensity Estimation.” Edited by Khanh N.Q. Le. PLOS ONE 16 (7): e0254108. https://doi.org/10.1371/journal.pone.0254108.
 
 ## 🌻 license
