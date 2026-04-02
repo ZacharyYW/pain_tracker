@@ -1,5 +1,7 @@
 # 🌿 *perennial:* bloom through the seasons
 
+![perennial](perennial.png)
+
 ![perennial app screen](perennial-example.png)
 
 This Android app and accompanying WearOS app utilizes smartwatch sensor data and manual logging to help users quietly and mindfully track chronic pain conditions like endometriosis.
